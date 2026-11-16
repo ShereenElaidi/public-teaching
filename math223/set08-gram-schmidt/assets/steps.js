@@ -12,6 +12,9 @@
      clear     true → wipe the panel before writing this step's lines
      caution   a one-line headline → the step is a CAUTION step: coral banner over the picture, coral
                panel and chip ($...$ allowed). A scene-level `caution` marks every step of the scene.
+     predict   {q, options, answer, why}: "predict before reveal". → first asks q (the picture still shows
+               the step before), → again reveals this step and the answer (options[answer]) with `why`.
+               Keep these rare — P turns them all off for a fast run-through.
    Per scene: notes (2–4 sentences, $...$ allowed) and tryIt (prompts): the handout below the slide (N scrolls to it).
    Colour macros in TeX: \mint{..} projection terms, \yel{..}, \coral{..}, \strike{..}.
    Course macros (same as shared/macros.tex): \ip{a}{b} \norm{a} \proj \Span \vect{v} \zero \R \Poly{2}
@@ -61,7 +64,7 @@
     // the clickable key buttons in the lower third: [label, action, hover label]; "|" = a small gap.
     // keys3D are added in the 3D pictures (004, 005, 006).
     keys: [["←", "prev", "back"], ["→", "next", "next"], "|", ["C", "captions", "captions"],
-      ["N", "notes", "notes"], ["B", "bright", "bright mode"], "|", ["S", "settings", "settings"]],
+      ["N", "notes", "notes"], ["B", "bright", "bright mode"], ["P", "predict", "predict prompts"], "|", ["S", "settings", "settings"]],
     keys3D: [["V", "edge", "edge-on view"], ["A", "auto", "auto-rotate"], ["HOME", "home", "preset view"]],
     // the SETTINGS menu (S): one row per control. act = what clicking the row does; rows without
     // act just explain. only3d rows are greyed out outside the 3D pictures (004, 005, 006).
@@ -71,6 +74,7 @@
       { key: "N", name: "Notes", act: "notes", text: "Scroll down to this scene's notes and Try-it prompts, below the slide (N again, or Esc, to come back)." },
       { key: "B", name: "Bright board", act: "bright", text: "Pale board with dark ink, for washed-out projectors." },
       { key: "F", name: "Fullscreen", act: "fullscreen", text: "Fill the screen; F or Esc to leave." },
+      { key: "P", name: "Predict prompts", act: "predict", text: "Before a few key steps, pause and ask the class to predict; → (or REVEAL) shows the answer and why. Off: no pauses." },
       { group: "3D pictures · scenes 004, 005, 006", only3d: true },
       { key: "drag", name: "Turn the picture", only3d: true, text: "Drag inside the picture (touch works too). Clicks inside it never change the step." },
       { key: "V", name: "Edge-on view", act: "edge", only3d: true, text: "Look along the plane $\\Span\\{v_1, v_2\\}$: it becomes a line and $v_3$ stands straight up. V again to go back." },
@@ -81,6 +85,7 @@
       { key: "←", name: "Back", text: "Also PageUp. Shows the previous step's final state." },
       { key: "R", name: "Replay", text: "Play the current step again." },
       { key: "1–6", name: "Jump to a scene", text: "Or pick one from the SCENES menu." },
+      { key: "Esc", name: "Close", text: "Closes a prediction, a menu, or the notes." },
       { key: "S", name: "This menu", text: "Open or close settings; Esc closes." },
     ],
     macros: {
@@ -135,6 +140,7 @@
       "Gram–Schmidt (GS) (Theorem 3.1) turns any basis $w_1, \\dots, w_n$ of an inner product space into an orthogonal basis $v_1, \\dots, v_n$.",
       "Each $v_k$ is $w_k$ minus its shadows on the earlier $v_j$. The shadow of $w_k$ on each vector $v_j$ is the vector itself $v_j$ scaled by the scalar $\\ip{w_k}{v_j} / \\norm{v_j}^2$.",
       "On the right-hand side it is the new vectors $v_j$ that appear, not the old $w_j$: you need the ones you have already made orthogonal.",
+      "The same formulas work for any linearly independent list $w_1, \\dots, w_k$ in $V$, not only a basis of $V$: they produce an orthogonal basis $v_1, \\dots, v_k$ of $\\Span\\{w_1, \\dots, w_k\\}$. For a basis of $V$ that span is $V$ itself — Theorem 3.1. (If the list is dependent, some $v_k = \\zero$; an orthogonal set excludes $\\zero$ (Def 2.1), so there is no orthogonal basis to report — see 005.)",
     ],
     tryIt: [
       "Write out $v_4$ for a basis of four vectors. How many shadows does it subtract?",
@@ -280,6 +286,12 @@
       },
       {
         caption: "Here $\\ip{w_2}{v_1} = \\norm{v_1}^2$, so the shadow is exactly $1\\cdot v_1$ — it sits right on top of $v_1$ — and $v_2 = w_2 - v_1$.",
+        predict: {
+          q: "Before $v_2$: compute $\\ip{w_2}{v_1}$ and $\\norm{v_1}^2$. The shadow of $w_2$ on $v_1$ is…",
+          options: ["shorter than $v_1$", "exactly $v_1$", "longer than $v_1$"],
+          answer: 1,
+          why: "$\\ip{w_2}{v_1} = 1 + 6 - 1 = 6$ and $\\norm{v_1}^2 = 1 + 4 + 1 = 6$, so the coefficient is $\\tfrac66 = 1$: the shadow is $1\\cdot v_1$.",
+        },
         cam: { yaw: -34, pitch: 24, zoom: 230, target: [0.64, 1.41, 0.57] },
         add: [
           { m: "\\ip{w_2}{v_1} = 1 + 6 - 1 = 6 = \\norm{v_1}^2" },
@@ -373,6 +385,12 @@
       },
       {
         caption: "And $v_3$, which is shorter than 1, gets stretched: the result is the orthonormal basis of Example 2.8 — now you know where it came from.",
+        predict: {
+          q: "$\\norm{v_3} = \\tfrac{\\sqrt{30}}{6}$. Will normalizing make $v_3$ longer or shorter?",
+          options: ["longer", "shorter", "no change"],
+          answer: 0,
+          why: "$\\sqrt{30} < \\sqrt{36} = 6$, so $\\norm{v_3} < 1$; dividing by a number below 1 stretches $v_3$ out to length 1.",
+        },
         cam: { frame: "plane", yaw: 45, pitch: 25, zoom: 300, target: [0.21, -0.22, 0.01] },
         add: [
           { m: "\\norm{v_3} = \\tfrac{\\sqrt{30}}{6} \\ \\Rightarrow\\ u_3 = \\tfrac{1}{\\sqrt{30}}(5,-2,1)", ans: 1 },
@@ -424,6 +442,12 @@
       },
       {
         caption: "The shadow of $w_3$ is $2v_1 + v_2 = w_3$ itself: $w_3$ already lies in the plane, so its drop-line has length zero.",
+        predict: {
+          q: "$\\det[\\,w_1\\ w_2\\ w_3\\,] = 0$, and $w_1, w_2$ are not parallel. Will the residual $v_3 = w_3 - (\\text{shadow on } \\Span\\{v_1, v_2\\})$ be $\\zero$?",
+          options: ["yes, $v_3 = \\zero$", "no, $v_3 \\ne \\zero$"],
+          answer: 0,
+          why: "$\\det = 0$ makes the three dependent, and $w_1, w_2$ are independent, so $w_3 \\in \\Span\\{w_1, w_2\\} = \\Span\\{v_1, v_2\\}$ (here $w_3 = w_1 + w_2$). A vector in the plane is its own shadow: nothing is left over.",
+        },
         cam: { frame: "plane", yaw: 45, pitch: 40, zoom: 185, target: [-0.6, 1.1, -0.04] },
         add: [
           { m: "v_1 = (1,2,-1), \\quad v_2 = (0,1,2)" },
@@ -493,12 +517,14 @@
       { caption: "$v_3$ is $w_3$ minus its shadow on the plane $\\Span\\{v_1, v_2\\}$; $v_3 = \\zero$ means $w_3$ was already lying in that plane." },
       { caption: "Normalize one vector at a time: $u_1 = v_1 / \\norm{v_1}$ — same direction, length 1." },
       { caption: "$u_2 = v_2 / \\norm{v_2}$ — the norm itself, not its square; the right angles survive." },
-      { caption: "$u_3 = v_3 / \\norm{v_3}$, and check $\\ip{u_i}{u_j} = \\delta_{ij}$ — if (GS) stopped, there is nothing to normalize." },
+      { caption: "$u_3 = v_3 / \\norm{v_3}$, and check $\\ip{u_i}{u_j} = \\delta_{ij}$: an orthonormal basis of $\\R^3$." },
     ],
     notes: [
       "Type any three vectors: integers, decimals like 0.5, or fractions like 1/3. Gram–Schmidt runs exactly here, with the dot product, so you see the same fractions you would get by hand.",
       "→ walks through it one vector at a time: your vectors, then $v_1, v_2, v_3$, then $u_1, u_2, u_3$. Drag to turn the picture, V to look edge-on at $\\Span\\{v_1, v_2\\}$, Home to come back.",
       "If the vectors are not a basis, some $v_k$ comes out $\\zero$ and (GS) stops, since the next step would divide by $\\norm{v_k}^2 = 0$. That happens exactly when $w_k \\in \\Span\\{w_1, \\dots, w_{k-1}\\}$.",
+      "The sandbox stops at the first $v_k = \\zero$ on purpose and does not skip it. Up to that point $v_1, \\dots, v_{k-1}$ are an orthogonal basis of $\\Span\\{w_1, \\dots, w_{k-1}\\}$ — (GS) works on any linearly independent list, giving an orthogonal basis of that list's span.",
+      "Entries are checked as you type: an empty field, $1/0$ or text that isn't a number is marked in coral with the reason, and nothing is computed (and → won't move on) until all nine are numbers.",
     ],
     tryIt: [
       "Pick $w_3 = w_1 + w_2$. Which $v_k$ is $\\zero$, and why that one?",

@@ -21,6 +21,7 @@
 
   <main id="picture" aria-label="picture"></main>
   <div id="caution" role="note"><span class="cz-chip">⚠ Caution</span><span class="cz-text"></span></div>
+  <section id="predict" aria-label="Predict before the reveal" aria-live="polite" hidden></section>
 
   <section id="right">
     <div class="box">
@@ -33,8 +34,10 @@
   <footer id="lower">
     <span class="chip" id="note-chip">REMARK</span>
     <div id="caption"></div>
-    <div id="touch-nav"><button id="prev-btn" type="button" aria-label="Back">‹</button><button id="next-btn" type="button" aria-label="Next">›</button></div>
-    <div id="keys"></div>
+    <nav id="navbar" aria-label="Steps and settings">
+      <div id="touch-nav"><button id="prev-btn" type="button" aria-label="Back">‹</button><button id="next-btn" type="button" aria-label="Next">›</button></div>
+      <div id="keys"></div>
+    </nav>
   </footer>
   <div id="toast"></div>
 </div>

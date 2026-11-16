@@ -28,18 +28,42 @@
   function escapeHTML(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
   // ------------------------------------------------------------------ stage scaling
+  // Two layouts. STAGE: the 1920×1080 (or 1120×2000) slide scaled as one piece — the projector look.
+  // FLOW: when that scale would make text and buttons too small (phones, small tablets, small windows),
+  // the parts reflow at real CSS sizes and the page scrolls; only the picture (clips / 3D) is scaled.
   const stage = $("#stage");
+  const coarse = window.matchMedia ? window.matchMedia("(pointer: coarse)") : { matches: false };
+  let lastFlow = null, lastW = 0;
   function fit() {
     const fr = document.getElementById("frame");
     const W = fr.clientWidth || window.innerWidth, H = fr.clientHeight || window.innerHeight;
     const portrait = H > W * 1.15 && W < 900;
-    root.classList.toggle("portrait", portrait);
     const sw = portrait ? 1120 : 1920, sh = portrait ? 2000 : 1080;
     const k = Math.min(W / sw, H / sh);
-    stage.style.transform = `translate(${(W - sw * k) / 2}px, ${(H - sh * k) / 2}px) scale(${k})`;
-    $("#slide").style.height = `${H}px`;
+    const flow = k < 0.45 || (coarse.matches && k < 0.7);
+    root.classList.toggle("flow", flow);
+    root.classList.toggle("wide", flow && W > H);
+    root.classList.toggle("portrait", portrait && !flow);
+    root.classList.toggle("coarse", coarse.matches);
+    if (flow) {
+      // the picture: full width in portrait; in landscape beside the panel, as tall as the screen allows
+      const avail = W > H ? Math.min(W * 0.56, Math.max(200, H - 132) * 1120 / 896) : W;
+      const pz = Math.min(avail / 1120, W > H ? 1 : Math.max(0.25, H * 0.62 / 896));
+      root.style.setProperty("--pz", pz.toFixed(4));
+      stage.style.transform = "";
+      $("#slide").style.height = "";
+      api.scale = pz;
+    } else {
+      stage.style.transform = `translate(${(W - sw * k) / 2}px, ${(H - sh * k) / 2}px) scale(${k})`;
+      $("#slide").style.height = `${H}px`;
+      // touch screens on the stage: buttons stay at least 44 CSS px however far the slide is scaled
+      root.style.setProperty("--tap", coarse.matches ? `${(44 / k).toFixed(1)}px` : "0px");
+      api.scale = k;
+    }
     $("#handout").style.minHeight = `${H}px`;       // N brings the handout fully into view
-    api.scale = k;
+    // re-measure the panel lines after a layout change (not on mobile height changes: the URL bar)
+    if (lastFlow !== null && (flow !== lastFlow || W !== lastW)) relayout();
+    lastFlow = flow; lastW = W;
   }
 
   // ------------------------------------------------------------------ DOM
@@ -68,6 +92,29 @@
 
   // shared api handed to the live scenes
   const api = { tex, rich, toast, scale: 1, linesEl, palette: () => (root.classList.contains("bright") ? "bright" : "dark") };
+  api.setCaption = (text) => { $("#caption").innerHTML = rich(text || ""); };
+
+  /** Shrink maths lines that are wider than their box. In the flow layout a line never shrinks below
+      72 % (minF): it scrolls sideways instead, so phone text stays readable. */
+  function fitLines(box, sel = ".ln", minF = 0.72) {
+    const flow = root.classList.contains("flow");
+    const cs = getComputedStyle(box);
+    const avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    for (const el of box.querySelectorAll(sel)) {
+      el.style.fontSize = ""; el.classList.remove("scroll");
+      if (!avail || el.scrollWidth <= avail) continue;
+      const base = parseFloat(getComputedStyle(el).fontSize);
+      let f = 1;
+      // KaTeX doesn't scale exactly linearly (rules, delimiters): shrink until it fits, a few passes at most
+      for (let pass = 0; pass < 4 && el.scrollWidth > avail; pass++) {
+        f *= avail / el.scrollWidth * 0.98;
+        if (flow && f < minF) { f = minF; el.classList.add("scroll"); }
+        el.style.fontSize = `${(base * f).toFixed(1)}px`;
+        if (f === minF) break;
+      }
+    }
+  }
+  api.fitLines = fitLines;
 
   // ------------------------------------------------------------------ state
   let si = 0, ki = 0;          // scene index, step index
@@ -87,7 +134,7 @@
         if (L.small) cls.push("small");
         if (L.coral) cls.push("coral");
         if (L.ans) cls.push("ans");
-        if (j < k) cls.push("past");
+        if (j < k) cls.push("past"); else cls.push("cur");
         if (j === k && animate) cls.push("enter", "sweep"); else cls.push("static");
         const body = L.t ? escapeHTML(L.t) : tex("\\displaystyle " + L.m);
         const delay = j === k && animate ? ` style="animation-delay:${(0.12 * html.filter((h) => h.cur).length).toFixed(2)}s"` : "";
@@ -95,11 +142,7 @@
       }
     }
     linesEl.innerHTML = html.map((h) => h.s).join("");
-    // shrink any line that would overflow the panel width
-    for (const el of linesEl.querySelectorAll(".ln")) {
-      const w = el.scrollWidth, avail = linesEl.clientWidth;
-      if (w > avail) el.style.fontSize = `${(parseFloat(getComputedStyle(el).fontSize) * avail / w * 0.98).toFixed(1)}px`;
-    }
+    fitLines(linesEl);                     // shrink any line that would overflow the panel width
     $("#panel-step").textContent = stepLabel(sc, k);
   }
   function stepLabel(sc, k) { return sc.steps.length > 1 ? `STEP ${k + 1} / ${sc.steps.length}` : ""; }
@@ -210,7 +253,8 @@
     picture.appendChild(wrap);
     const note = wrap.querySelector(".brace-note");
     return {
-      setStep(k) { note.classList.toggle("show", k >= 1); },
+      setStep(k) { note.classList.toggle("show", k >= 1); this.refit(); },
+      refit() { fitLines(wrap.querySelector(".thm"), ".display", 0.6); },
       destroy() { wrap.remove(); },
     };
   }
@@ -220,6 +264,7 @@
     if (live && live.destroy) live.destroy();
     live = null;
     picture.innerHTML = "";
+    picture.dataset.kind = sc.kind;
     linesEl.innerHTML = "";
     if (sc.kind === "clip") { picture.appendChild(clip.build()); clip.preloadStills(sc); }
     else if (sc.kind === "html") live = theoremModule(sc);
@@ -230,6 +275,7 @@
 
   /** mode: "enter" (scene start, animate), "forward", "replay", "back" (no animation, final state). */
   function go(s, k, mode) {
+    closePredict();
     s = Math.max(0, Math.min(S.scenes.length - 1, s));
     const sc = S.scenes[s];
     k = Math.max(0, Math.min(sc.steps.length - 1, k));
@@ -243,14 +289,75 @@
     renderSettings(); renderKeys(sc);
   }
   function next() {
+    if (ask) { reveal(); return; }                       // a prediction is open: → reveals it
     const sc = S.scenes[si];
-    if (ki < sc.steps.length - 1) go(si, ki + 1, "forward");
-    else if (si < S.scenes.length - 1) go(si + 1, 0, "enter");
+    if (ki < sc.steps.length - 1) {
+      // the sandbox only moves on into calculations from complete, valid input
+      if (live && live.canAdvance && !live.canAdvance(ki)) return;
+      const P = predictOn ? (live && live.predict ? live.predict(ki + 1) : sc.steps[ki + 1].predict) : null;
+      if (P) { openPredict(P, si, ki + 1); return; }
+      go(si, ki + 1, "forward");
+    } else if (si < S.scenes.length - 1) go(si + 1, 0, "enter");
   }
   function prev() {
+    if (ask) { closePredict(); return; }                 // ← closes the question, stays put
     if (ki > 0) go(si, ki - 1, "back");
     else if (si > 0) go(si - 1, S.scenes[si - 1].steps.length - 1, "back");
   }
+
+  /** after a resize: re-measure the panel lines (no replay, nothing else changes) */
+  function relayout() {
+    const sc = S.scenes[si];
+    if (!sc || mountedScene !== si) return;
+    if (sc.kind === "sandbox") { if (live && live.refit) live.refit(); }
+    else { renderPanel(sc, ki, false); if (live && live.refit) live.refit(); }
+  }
+
+  // ------------------------------------------------------------------ predict before reveal
+  // A step may carry predict: {q, options, answer, why}. → first shows the question (the picture and
+  // panel still show the step before); → again, or REVEAL, shows the step and the answer with its reason.
+  const predictEl = $("#predict");
+  let predictOn = true, ask = null, shownAnswer = false;   // ask = {P, s, k, choice}
+  function openPredict(P, s, k) {
+    ask = { P, s, k, choice: -1 };
+    predictEl.className = "ask";
+    predictEl.innerHTML = `<div class="pr-head"><span class="pr-chip">Predict</span><span class="pr-q">${rich(P.q)}</span></div>` +
+      `<div class="pr-foot"><div class="pr-opts" role="group" aria-label="Your prediction (optional)">${P.options.map((o, i) =>
+        `<button type="button" class="pr-opt" data-i="${i}" aria-pressed="false">${rich(o)}</button>`).join("")}</div>` +
+      `<button type="button" class="pr-go">Reveal →</button></div>`;
+    predictEl.hidden = false;
+    if (root.classList.contains("flow")) predictEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    renderKeys();
+  }
+  function reveal() {
+    const a = ask;
+    ask = null;
+    go(a.s, a.k, "forward");
+    const P = a.P, right = a.choice === P.answer;
+    const verdict = a.choice < 0 ? "Answer" : right ? "✓ Right" : "Not quite";
+    predictEl.className = "answer" + (a.choice >= 0 && !right ? " miss" : "");
+    predictEl.innerHTML = `<div class="pr-head"><span class="pr-chip">${verdict}</span>` +
+      `<span class="pr-q"><b>${rich(P.options[P.answer])}</b> — ${rich(P.why)}</span>` +
+      `<button type="button" class="pr-x" aria-label="Close the answer">✕</button></div>`;
+    predictEl.hidden = false;
+    shownAnswer = true;
+  }
+  function closePredict() {
+    if (!ask && !shownAnswer) return;
+    ask = null; shownAnswer = false;
+    predictEl.hidden = true; predictEl.className = ""; predictEl.innerHTML = "";
+  }
+  predictEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const opt = e.target.closest(".pr-opt");
+    if (opt && ask) {
+      ask.choice = +opt.dataset.i;
+      predictEl.querySelectorAll(".pr-opt").forEach((b) => b.setAttribute("aria-pressed", b === opt ? "true" : "false"));
+      return;
+    }
+    if (e.target.closest(".pr-go")) { next(); return; }
+    if (e.target.closest(".pr-x")) closePredict();
+  });
 
   function toggle(cls, on) { root.classList.toggle(cls, on); }
 
@@ -275,6 +382,7 @@
     edge: () => { if (is3D()) live.edge(); },
     auto: () => { if (is3D()) live.auto(); },
     home: () => { if (is3D()) live.home(); },
+    predict: () => { predictOn = !predictOn; if (!predictOn) closePredict(); toast(predictOn ? "predict prompts on" : "predict prompts off"); },
   };
   const stateOf = {
     captions: () => !root.classList.contains("captions-off"),
@@ -283,12 +391,13 @@
     fullscreen: () => !!document.fullscreenElement,
     edge: () => is3D() && live.status().edge,
     auto: () => is3D() && live.status().auto,
+    predict: () => predictOn,
   };
   function act(name) { actions[name](); renderSettings(); renderKeys(); }
 
   // ------------------------------------------------------------------ handout (the notes below the slide)
   const frameEl = $("#frame"), handout = $("#handout");
-  const handoutInView = () => frameEl.scrollTop > handout.offsetTop / 2;
+  const handoutInView = () => frameEl.scrollTop + frameEl.clientHeight / 2 > handout.offsetTop;
   function showHandout(on) { frameEl.scrollTo({ top: on ? handout.offsetTop - 16 : 0, behavior: "smooth" }); }
   $("#ho-up").addEventListener("click", () => showHandout(false));
   let scrollRaf = 0, wasDown = false;
@@ -355,26 +464,35 @@
   // ------------------------------------------------------------------ input
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;  // typing in the sandbox
+    const tg = e.target;
+    // typing in the sandbox: every key (arrows, Home, Space, letters) belongs to the field
+    if (tg && (tg.tagName === "INPUT" || tg.tagName === "TEXTAREA" || tg.isContentEditable)) return;
     const k = e.key, K = k.length === 1 ? k.toLowerCase() : k;
-    const keyAct = { c: "captions", n: "notes", b: "bright", f: "fullscreen", v: "edge", a: "auto", Home: "home" }[K];
+    // a focused prediction button keeps its own Space / Enter
+    if (tg && tg.closest && tg.closest("#predict button") && (k === " " || k === "Enter")) return;
+    if (k === "Enter" && ask) { reveal(); e.preventDefault(); return; }
+    const keyAct = { c: "captions", n: "notes", b: "bright", f: "fullscreen", v: "edge", a: "auto", Home: "home", p: "predict" }[K];
     if (keyAct && (["edge", "auto", "home"].indexOf(keyAct) < 0 || is3D())) act(keyAct);
     else if (k === "ArrowRight" || k === "PageDown" || k === " ") next();
     else if (k === "ArrowLeft" || k === "PageUp") prev();
     else if (K === "r") go(si, ki, "replay");
     else if (K === "s") toggleSettings();
     else if (/^[1-9]$/.test(k) && +k <= S.scenes.length) go(+k - 1, 0, "enter");
-    else if (k === "Escape") { menu.classList.remove("open"); toggleSettings(false); showHandout(false); }
+    else if (k === "Escape") { closePredict(); menu.classList.remove("open"); toggleSettings(false); showHandout(false); }
     else return;
     e.preventDefault();
   });
   stage.addEventListener("click", (e) => {
     if (menu.classList.contains("open")) { menu.classList.remove("open"); return; }
     if (settings.classList.contains("open")) { toggleSettings(false); return; }
-    if (e.target.closest("svg.scene, #menu, #settings, button, input, .sb-panel, a")) return;
+    if (e.target.closest("svg.scene, #menu, #settings, #predict, button, input, .sb-panel, a")) return;
+    if (root.classList.contains("flow")) return;     // phones: tapping to read or scroll never advances
     next();
   });
   window.addEventListener("resize", fit);
+  // KaTeX loads its fonts on first use, after the first measurement: measure the lines again then
+  if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener("loadingdone", () => relayout());
+  if (coarse.addEventListener) coarse.addEventListener("change", fit);
 
   // ------------------------------------------------------------------ boot
   fit();
@@ -384,5 +502,5 @@
   // fonts first, so KaTeX and the SVG labels measure correctly
   (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(() =>
     go(Math.max(0, start), startStep, startStep > 0 ? "back" : "enter"));
-  window.GS_PLAYER = { go, next, prev, state: () => ({ scene: S.scenes[si].id, step: ki + 1 }) };
+  window.GS_PLAYER = { go, next, prev, act, state: () => ({ scene: S.scenes[si].id, step: ki + 1, asking: !!ask }), live: () => live };
 })();

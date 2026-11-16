@@ -20,6 +20,8 @@
   --yellow: #F3C64F;
   --coral: #F0907F;
   --dim: 0.55;
+  --past: 0.8;      /* earlier panel lines: still legible to compare with (≥ 6:1 on both boards) */
+  --quiet: 0.78;    /* chrome text: title, step counter, small labels */
   --chalk-rgb: 238, 243, 234;
   --grid-minor: rgba(var(--chalk-rgb), 0.05);
   --grid-major: rgba(var(--chalk-rgb), 0.053);  /* drawn over a minor line: 1-(.95)(.947) ≈ 10 % */
@@ -64,10 +66,11 @@ html.portrait #stage { width: 1120px; height: 2000px; }
 /* ------------------------------------------------------------------ top bar */
 #topbar { position: absolute; left: 0; top: 0; width: 100%; height: 72px; display: flex; align-items: center;
   justify-content: space-between; padding: 0 44px; }
-.smallcaps { text-transform: uppercase; letter-spacing: 0.08em; font-size: 20px; opacity: var(--dim); }
+.smallcaps { text-transform: uppercase; letter-spacing: 0.08em; font-size: 20px; opacity: var(--quiet); }
 #title { display: flex; align-items: center; gap: 22px; }
 #menu-btn, #settings-btn { font: inherit; color: var(--chalk); background: none; border: 1.5px solid rgba(var(--chalk-rgb), 0.35);
-  border-radius: 6px; padding: 4px 12px; font-size: 17px; letter-spacing: 0.08em; cursor: pointer; opacity: var(--dim); }
+  border-radius: 6px; padding: 4px 12px; font-size: 17px; letter-spacing: 0.08em; cursor: pointer; opacity: var(--quiet);
+  min-height: var(--tap, 0px); }
 #menu-btn:hover, #settings-btn:hover, #settings-btn.on { opacity: 1; }
 #progress { display: flex; align-items: center; gap: 22px; }
 #segments { display: flex; gap: 10px; }
@@ -82,7 +85,8 @@ html.portrait #stage { width: 1120px; height: 2000px; }
   background: none; border: 0; border-radius: 10px; padding: 10px 18px; cursor: pointer; }
 #menu button:hover, #menu button.cur { background: rgba(var(--chalk-rgb), 0.07); }
 #menu button.cur { color: var(--mint); }
-#menu kbd { font: inherit; opacity: var(--dim); margin-right: 14px; }
+#menu kbd { font: inherit; opacity: var(--quiet); margin-right: 14px; }
+#menu button { min-height: var(--tap, 0px); }
 
 /* ------------------------------------------------------------------ picture */
 #picture { position: absolute; left: 0; top: 72px; width: 1120px; height: 896px; overflow: hidden; }
@@ -133,14 +137,19 @@ html.portrait #right { left: 0; top: 968px; width: 1120px; height: 760px; }
 .box { position: absolute; left: 40px; right: 56px; top: 44px; bottom: 40px; background: var(--board-deep);
   border: 3.4px solid var(--mint); border-radius: 17px; }
 html.portrait .box { left: 44px; right: 44px; top: 34px; bottom: 20px; }
-#panel-lines { position: absolute; left: 40px; right: 34px; top: 52px; bottom: 64px; overflow: hidden; }
+#panel-lines { position: absolute; left: 18px; padding-left: 22px; right: 34px; top: 52px; bottom: 64px; overflow: hidden; }  /* the padding holds the current-step bar */
 .ln { position: relative; font-size: 34px; line-height: 1.25; margin: 0 0 22px; white-space: nowrap;
   transition: opacity 0.5s ease-out; }
 .ln .katex { font-size: 1.05em; }
 .ln.small { font-size: 29px; }
-.ln.t { font-size: 19px; letter-spacing: 0.1em; text-transform: uppercase; opacity: var(--dim); margin-bottom: 8px; color: var(--mint); }
-.ln.past { opacity: var(--dim); }
-.ln.t.past { opacity: calc(var(--dim) * 0.75); }
+.ln.t { font-size: 19px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.9; margin-bottom: 8px; color: var(--mint); }
+.ln.past { opacity: var(--past); }
+.ln.t.past { opacity: 0.72; }
+/* the step just written: a short mint bar in the margin (earlier steps stay readable, not faded away) */
+.ln.cur:not(.t)::before { content: ""; position: absolute; left: -22px; top: 0.12em; bottom: 0.12em; width: 5px; border-radius: 3px;
+  background: var(--mint); }
+.ln.cur.coral::before { background: var(--coral); }
+.ln.scroll { overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
 .ln.enter { animation: line-in 0.6s ease-out both; }
 @keyframes line-in { from { opacity: 0; transform: translateY(10px); } }
 .ln.ans .body { color: var(--yellow); position: relative; display: inline-block; }
@@ -151,7 +160,7 @@ html.portrait .box { left: 44px; right: 44px; top: 34px; bottom: 20px; }
 .ln.ans.past .body { color: var(--chalk); }
 .ln.ans.past .body::after { display: none; }
 .ln.coral { color: var(--coral); }
-#panel-step { position: absolute; right: 30px; bottom: 20px; font-size: 18px; letter-spacing: 0.1em; opacity: var(--dim); }
+#panel-step { position: absolute; right: 30px; bottom: 20px; font-size: 18px; letter-spacing: 0.1em; opacity: var(--quiet); }
 
 .k-mint { color: var(--mint); }
 .k-yel { color: var(--yellow); }
@@ -177,19 +186,33 @@ html.portrait .box { left: 44px; right: 44px; top: 34px; bottom: 20px; }
   background: rgba(var(--chalk-rgb), 0.06); border: 0; border-bottom: 3px solid var(--mint); border-radius: 6px 6px 0 0;
   padding: 3px 4px; outline: none; user-select: text; -webkit-user-select: text; }
 .sb-in:focus { background: rgba(var(--chalk-rgb), 0.12); }
-.sb-in.bad { border-bottom-color: var(--coral); color: var(--coral); }
-#sb-out { margin-top: 14px; }
+.sb-in.bad { border-bottom-color: var(--coral); color: var(--coral); background: rgba(240, 144, 127, 0.12); }
+html.bright .sb-in.bad { background: rgba(208, 52, 44, 0.08); }
+.sb-presets button, .sb-in { min-height: var(--tap, 0px); }
+.sb-err { margin: -2px 0 10px 102px; color: var(--coral); font-size: 19px; line-height: 1.35; white-space: normal; }
+.sb-err span { display: block; }
+.sb-err[hidden], .sb-err span[hidden] { display: none; }
+#sb-out { margin-top: 14px; transition: opacity 0.2s; }
+#sb-out.pending { opacity: 0.3; }          /* typed, not yet checked: these results are not for that input */
+.sb-note { margin: 4px 0 0; font-size: 22px; line-height: 1.45; white-space: normal; }
+.sb-wait { display: flex; align-items: flex-start; justify-content: center; padding-top: 34px; pointer-events: none; }
+.sb-wait[hidden] { display: none; }
+.sb-wait span { background: var(--board-deep); color: var(--coral); border: 3px solid var(--coral); border-radius: 12px;
+  padding: 10px 22px; font-size: 30px; letter-spacing: 0.08em; text-transform: uppercase; }
+/* the sandbox panel can hold more than fits (errors, a failure explained): let it scroll, never clip */
+#panel-lines:has(.sb-panel) { overflow-y: auto; scrollbar-width: thin; }
 #sb-out .ln { margin-bottom: 12px; }
 #sb-out .ln.t { margin-bottom: 6px; }
 html.portrait .sb-in { width: 150px; font-size: 34px; }
 html.portrait .sb-presets button { font-size: 24px; }
+html.portrait .sb-err { margin-left: 0; font-size: 24px; }
 
 /* ------------------------------------------------------------------ handout (N): notes below the slide */
 #handout { box-sizing: border-box; max-width: 940px; margin: 0 auto; padding: 56px 28px 120px; font-size: 19px; line-height: 1.7; color: var(--chalk);
   user-select: text; -webkit-user-select: text; }
 #handout .ho-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
 #handout .ho-chip { position: static; display: inline-block; font-size: 17px; }
-#handout #ho-up { font: inherit; font-size: 15px; letter-spacing: 0.1em; color: var(--chalk); opacity: var(--dim); background: none;
+#handout #ho-up { font: inherit; font-size: 15px; letter-spacing: 0.1em; color: var(--chalk); opacity: var(--quiet); background: none; min-height: 44px;
   border: 1.5px solid rgba(var(--chalk-rgb), 0.35); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
 #handout #ho-up:hover { opacity: 1; }
 #handout .ho-head { flex-wrap: wrap; }
@@ -221,7 +244,7 @@ html.captions-off #caption, html.captions-off #lower .chip { opacity: 0; }
 #keys .kgap { width: 10px; }
 #keys .kbtn { font: inherit; font-size: 17px; font-weight: 500; letter-spacing: 0.06em; min-width: 34px; height: 34px; padding: 0 8px;
   color: var(--chalk); background: none; border: 2px solid rgba(var(--chalk-rgb), 0.28); border-radius: 7px; cursor: pointer;
-  opacity: 0.72; transition: opacity 0.15s, background-color 0.15s; }
+  opacity: 0.85; transition: opacity 0.15s, background-color 0.15s; min-width: max(34px, var(--tap, 0px)); min-height: var(--tap, 0px); }
 #keys .kbtn:hover { opacity: 1; border-color: rgba(var(--chalk-rgb), 0.6); }
 #keys .kbtn.on { background: var(--mint); border-color: var(--mint); color: var(--board); opacity: 1; }
 /* instant hover label above each key button (the native title tooltip is slow) */
@@ -283,8 +306,8 @@ html.caution #lower #note-chip { background: var(--coral); }
 #settings.open { display: block; }
 #settings .st-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0 4px 6px; }
 #settings .st-title { font-size: 21px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mint); font-weight: 700; }
-#settings .st-close { font: inherit; font-size: 18px; letter-spacing: 0.08em; color: var(--chalk); opacity: var(--dim); background: none;
-  border: 0; cursor: pointer; }
+#settings .st-close { font: inherit; font-size: 18px; letter-spacing: 0.08em; color: var(--chalk); opacity: var(--quiet); background: none;
+  border: 0; cursor: pointer; min-height: max(40px, var(--tap, 0px)); padding: 0 10px; }
 #settings .st-group { font-size: 17px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--mint); opacity: 0.85;
   margin: 14px 4px 4px; }
 #settings .st-row { display: grid; grid-template-columns: 130px 250px 1fr 80px; align-items: center; gap: 14px; width: 100%;
@@ -295,7 +318,8 @@ html.caution #lower #note-chip { background: var(--coral); }
 #settings kbd { font: inherit; font-size: 17px; font-weight: 700; justify-self: start; border: 2px solid rgba(var(--chalk-rgb), 0.4);
   border-radius: 7px; padding: 3px 9px; white-space: nowrap; }
 #settings .st-name { font-size: 21px; }
-#settings .st-text { font-size: 18px; line-height: 1.35; opacity: 0.72; }
+#settings .st-text { font-size: 18px; line-height: 1.35; opacity: 0.85; }
+#settings .st-row { min-height: var(--tap, 0px); }
 #settings .st-text .katex { font-size: 1.1em; }
 #settings .st-state { font-size: 15px; font-weight: 700; letter-spacing: 0.08em; text-align: center; border-radius: 6px; padding: 4px 0; }
 #settings .st-state.on { background: var(--mint); color: var(--board); }
@@ -303,3 +327,163 @@ html.caution #lower #note-chip { background: var(--coral); }
 #settings .st-state.go { border: 2px solid var(--mint); color: var(--mint); }
 html.portrait #settings { width: 1048px; }
 html.portrait #settings .st-row { grid-template-columns: 120px 200px 1fr 76px; }
+
+/* ------------------------------------------------------------------ predict before reveal */
+#predict { position: absolute; left: 36px; bottom: 128px; z-index: 35; width: 900px; background: var(--board-deep);
+  border: 3px solid var(--yellow); border-radius: 14px; padding: 12px 16px; font-size: 22px; line-height: 1.38; }
+#predict[hidden] { display: none; }
+#predict .katex { font-size: 1.08em; }
+#predict .pr-head { display: flex; align-items: flex-start; gap: 14px; }
+#predict .pr-chip { flex: none; background: var(--yellow); color: var(--board); font-weight: 700; font-size: 18px; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 4px 11px 3px; border-radius: 7px; margin-top: 1px; white-space: nowrap; }
+#predict .pr-q { flex: 1; }
+#predict .pr-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; }
+#predict .pr-opts { display: flex; flex-wrap: wrap; gap: 10px; }
+#predict button { font: inherit; color: var(--chalk); background: none; cursor: pointer; }
+#predict .pr-opt { font-size: 21px; border: 2px solid rgba(var(--chalk-rgb), 0.45); border-radius: 10px; padding: 4px 14px;
+  min-height: max(44px, var(--tap, 0px)); }
+#predict .pr-opt:hover { border-color: var(--chalk); }
+#predict .pr-opt[aria-pressed="true"] { background: rgba(var(--chalk-rgb), 0.12); border-color: var(--yellow); color: var(--yellow); }
+#predict .pr-go { font-size: 19px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--board);
+  background: var(--yellow); border: 0; border-radius: 9px; padding: 6px 18px; min-height: max(44px, var(--tap, 0px)); }
+#predict.answer { border-color: var(--mint); padding: 10px 14px; font-size: 21px; }
+#predict.answer .pr-chip { background: var(--mint); }
+#predict.answer.miss { border-color: var(--coral); }
+#predict.answer.miss .pr-chip { background: var(--coral); }
+#predict.answer b { font-weight: 700; }
+#predict .pr-x { flex: none; font-size: 20px; opacity: var(--quiet); border: 0; min-width: max(44px, var(--tap, 0px)); min-height: max(40px, var(--tap, 0px)); }
+html.portrait #predict { bottom: 1048px; width: 1048px; font-size: 30px; }
+html.portrait #predict .pr-opt { font-size: 28px; }
+
+#navbar { display: contents; }     /* on the stage the buttons sit in the lower third as before */
+#touch-nav button { min-width: var(--tap, 0px); min-height: var(--tap, 0px); }
+
+/* ================================================================== FLOW layout (phones, small tablets)
+   html.flow is set by chalkboard.js when the scaled stage would be too small to read or tap. The parts
+   reflow at real sizes and the page scrolls; only the picture (clips and 3D, fixed 1120×896) is scaled,
+   by --pz. Interactive targets are at least 44×44 CSS px. */
+html.flow #frame { scroll-behavior: auto; }
+html.flow #slide { height: auto; overflow: visible; }
+html.flow #stage { position: relative; width: auto; height: auto; transform: none; overflow: visible;
+  display: grid; grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "top" "caution" "pic" "predict" "cap" "panel" "nav"; }
+html.flow.wide #stage { grid-template-columns: calc(1120px * var(--pz, 0.35) + 24px) minmax(0, 1fr); align-items: start;
+  grid-template-areas: "top top" "caution caution" "pic panel" "predict panel" "cap panel" "nav nav"; grid-template-rows: auto auto auto auto 1fr auto; }
+
+/* top bar: title and counter, then the two menus and the progress */
+html.flow #topbar { grid-area: top; position: static; width: auto; height: auto; padding: 8px 12px 6px;
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr); grid-template-areas: "text text count" "menu sett segs"; gap: 6px 10px; align-items: center; }
+html.flow #title, html.flow #progress { display: contents; }
+html.flow #title-text { grid-area: text; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+html.flow #count { grid-area: count; justify-self: end; }
+html.flow .smallcaps { font-size: 12.5px; letter-spacing: 0.05em; }
+html.flow #menu-btn { grid-area: menu; }
+html.flow #settings-btn { grid-area: sett; }
+html.flow #menu-btn, html.flow #settings-btn { font-size: 13px; min-height: 44px; padding: 0 12px; }
+html.flow #segments { grid-area: segs; justify-self: stretch; justify-content: flex-end; gap: 3px; min-width: 0; }
+html.flow #segments i { flex: 1 1 0; width: auto; max-width: 20px; min-width: 5px; height: 5px; }
+
+/* menus: full-width sheets with a scroll of their own */
+html.flow #menu, html.flow #settings { position: fixed; left: 8px; right: 8px; top: 8px; width: auto; min-width: 0;
+  max-height: calc(100% - 16px); overflow-y: auto; overscroll-behavior: contain; border-width: 2px; border-radius: 14px; padding: 8px; }
+html.flow #menu button { font-size: 16.5px; min-height: 48px; padding: 8px 12px; }
+html.flow #settings .st-title { font-size: 14px; }
+html.flow #settings .st-close { font-size: 14px; min-height: 44px; }
+html.flow #settings .st-group { font-size: 12px; margin: 12px 4px 2px; }
+html.flow #settings .st-row { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "kbd name state" "text text text";
+  gap: 4px 10px; min-height: 48px; padding: 8px; }
+html.flow #settings kbd { grid-area: kbd; font-size: 13px; padding: 2px 7px; }
+html.flow #settings .st-name { grid-area: name; font-size: 15px; }
+html.flow #settings .st-text { grid-area: text; font-size: 13.5px; }
+html.flow #settings .st-state { font-size: 11.5px; padding: 3px 8px; }
+html.flow #settings .st-row > :last-child { grid-area: state; }
+
+/* caution banner: above the picture instead of over it */
+html.flow #caution { grid-area: caution; position: static; max-width: none; margin: 4px 12px 8px; font-size: 14px; gap: 10px; padding: 6px 12px 6px 6px; }
+html.flow #caution .cz-chip { font-size: 12px; padding: 3px 8px 2px; }
+
+/* the picture: clips and 3D scaled as one piece; the theorem (001) reflows as text */
+html.flow #picture { grid-area: pic; position: relative; left: auto; top: auto; justify-self: center;
+  width: calc(1120px * var(--pz, 0.35)); height: calc(896px * var(--pz, 0.35)); }
+html.flow #picture > * { transform: scale(var(--pz, 0.35)); transform-origin: 0 0; }
+html.flow #picture[data-kind="html"] { width: auto; height: auto; justify-self: stretch; }
+html.flow #picture[data-kind="html"] > * { position: relative; transform: none; width: auto; height: auto; }
+html.flow .thm-wrap { padding: 20px 12px 8px; }
+html.flow .thm { font-size: 15.5px; line-height: 1.55; padding: 30px 16px 16px; border-width: 2px; }
+html.flow .thm .display { font-size: 18px; margin: 14px 0 6px; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
+html.flow .thm .brace-note { font-size: 13.5px; }
+html.flow .chip { font-size: 12px; top: -12px; left: 14px; padding: 4px 10px 3px; border-radius: 6px; }
+html.flow .sb-wait { padding-top: 60px; }
+html.flow .sb-wait span { font-size: 44px; }
+
+/* prediction card: in the page, right under the picture */
+html.flow #predict { grid-area: predict; position: static; width: auto; margin: 10px 12px 0; font-size: 15.5px; padding: 12px; border-width: 2px; }
+html.flow #predict .pr-head { gap: 10px; flex-wrap: wrap; }
+html.flow #predict .pr-chip { font-size: 12px; }
+html.flow #predict .pr-q { flex-basis: 220px; }
+html.flow #predict .pr-opt { font-size: 15px; min-height: 44px; padding: 6px 12px; }
+html.flow #predict .pr-go { font-size: 14px; min-height: 44px; }
+html.flow #predict.answer { font-size: 14.5px; }
+
+/* caption, then the panel */
+html.flow #lower { display: contents; }
+html.flow #note-chip { display: none; }
+html.flow #caption { grid-area: cap; margin: 10px 12px 0; padding: 10px 14px; font-size: 16px; line-height: 1.5;
+  background: var(--board-deep); border-left: 4px solid var(--mint); border-radius: 8px; }
+html.caution.flow #caption { border-left-color: var(--coral); }
+html.flow #right { grid-area: panel; position: relative; left: auto; top: auto; width: auto; height: auto; }
+html.flow .box { position: relative; left: auto; right: auto; top: auto; bottom: auto; margin: 22px 12px 12px; padding: 24px 14px 10px 24px;
+  border-width: 2px; border-radius: 14px; }
+html.flow #panel-lines { position: static; overflow: visible; padding-left: 0; }
+html.flow .ln { font-size: 18px; margin-bottom: 12px; }
+html.flow .ln.small { font-size: 16px; }
+html.flow .ln.t { font-size: 11.5px; margin-bottom: 6px; }
+html.flow .ln.cur:not(.t)::before { left: -14px; width: 4px; }
+html.flow #panel-step { position: static; text-align: right; font-size: 11.5px; margin-top: 2px; }
+html.flow #sb-out .ln { margin-bottom: 10px; }
+
+/* sandbox inputs: three to a row, each a comfortable target */
+html.flow .sb-presets { gap: 8px; margin-bottom: 12px; }
+html.flow .sb-presets button { font-size: 14px; min-height: 44px; padding: 0 12px; border-width: 2px; }
+html.flow .sb-row { font-size: 18px; gap: 4px; margin-bottom: 6px; }
+html.flow .sb-lab { min-width: 44px; flex: none; }
+html.flow .sb-par { font-size: 22px; }
+html.flow .sb-in { flex: 1 1 0; width: auto; min-width: 0; max-width: 120px; font-size: 17px; min-height: 44px; }
+html.flow .sb-err { margin: 0 0 8px; font-size: 13px; }
+html.flow .sb-note { font-size: 14.5px; }
+
+/* the step buttons stay on screen at the bottom while the page scrolls */
+html.flow #navbar { grid-area: nav; position: sticky; bottom: 0; z-index: 26; display: flex; flex-wrap: wrap; justify-content: center;
+  align-items: center; gap: 8px 12px; padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); margin-top: 12px;
+  background: var(--board-deep); border-top: 2px solid rgba(var(--chalk-rgb), 0.14); }
+html.flow #touch-nav { display: flex; gap: 12px; }
+html.flow #touch-nav button { width: 76px; height: 48px; font-size: 28px; line-height: 1; }
+html.flow #keys { flex: 0 1 auto; max-width: 100%; min-width: 0; flex-wrap: wrap; justify-content: center; gap: 6px; white-space: normal; }
+html.flow #keys .kgap { display: none; }
+html.flow #keys .kbtn { min-width: 44px; height: 44px; font-size: 14px; }
+html.flow #keys .kbtn[data-act="prev"], html.flow #keys .kbtn[data-act="next"] { display: none; }   /* ‹ › are right there */
+html.flow #keys .kbtn::after { display: none; }
+html.flow #toast { position: fixed; left: 50%; top: 10px; font-size: 13px; padding: 5px 12px; }
+html.flow.wide #picture { margin-top: 4px; }
+/* landscape phones: one-row top bar and a slimmer step bar, so the picture fits between them */
+html.flow.wide #topbar { grid-template-columns: minmax(0, 1fr) auto auto minmax(60px, 130px) auto; grid-template-areas: "text menu sett segs count"; padding: 4px 12px; }
+html.flow.wide #navbar { padding-top: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); margin-top: 8px; }
+html.flow.wide #touch-nav button { height: 44px; }
+html.flow.wide .box { margin-top: 16px; }
+/* small tablets in the flow layout: a size step up from phones */
+@media (min-width: 600px) and (min-height: 600px) {
+  html.flow .smallcaps { font-size: 14px; }
+  html.flow #caption { font-size: 18px; margin-left: 20px; margin-right: 20px; }
+  html.flow .box { margin-left: 20px; margin-right: 20px; padding: 28px 20px 12px 30px; }
+  html.flow .ln { font-size: 21px; }
+  html.flow .ln.small { font-size: 19px; }
+  html.flow .ln.t { font-size: 13px; }
+  html.flow .sb-row { font-size: 21px; }
+  html.flow .sb-in { font-size: 19px; max-width: 150px; }
+  html.flow .sb-presets button { font-size: 15.5px; }
+  html.flow .sb-err { font-size: 14.5px; }
+  html.flow #predict { font-size: 17px; margin-left: 20px; margin-right: 20px; }
+  html.flow #predict .pr-opt { font-size: 16.5px; }
+  html.flow .thm { font-size: 18px; }
+  html.flow .thm .display { font-size: 21px; }
+}

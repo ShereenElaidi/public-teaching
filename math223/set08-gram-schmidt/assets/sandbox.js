@@ -27,15 +27,27 @@
   const vsub = (a, b) => a.map((x, i) => qsub(x, b[i]));
   const vzero = (a) => a.every(isZero);
 
-  /** "3", "-2", "0.5", "1/3", "-2/7" → rational, or null if it isn't a number we accept */
-  function parseQ(str) {
-    const s = String(str).trim().replace(/−/g, "-");
-    let m;
-    if ((m = /^([+-]?)(\d+)$/.exec(s))) return Q(BigInt(m[1] + m[2]));
-    if ((m = /^([+-]?)(\d*)\.(\d+)$/.exec(s))) return Q(BigInt(m[1] + (m[2] || "0") + m[3]), 10n ** BigInt(m[3].length));
-    if ((m = /^([+-]?\d+)\s*\/\s*([+-]?\d+)$/.exec(s)) && BigInt(m[2]) !== 0n) return Q(BigInt(m[1]), BigInt(m[2]));
-    return null;
+  /** One typed entry → {q} (an exact rational) or {err} (a short message for the student).
+      Accepted, as before: integers "3", "-2"; decimals "0.5", "-.25"; fractions "1/3", "-2/7".
+      `partial` marks something that is merely unfinished ("-", "1/", "2."), `empty` an empty field. */
+  const LIMIT = 99;
+  function checkEntry(str) {
+    const s = String(str == null ? "" : str).trim().replace(/[−–]/g, "-");
+    let m, q;
+    if (s === "") return { err: "empty — type a number (0 is fine).", empty: true };
+    if ((m = /^([+-]?)(\d+)$/.exec(s))) q = Q(BigInt(m[1] + m[2]));
+    else if ((m = /^([+-]?)(\d*)\.(\d+)$/.exec(s))) q = Q(BigInt(m[1] + (m[2] || "0") + m[3]), 10n ** BigInt(m[3].length));
+    else if ((m = /^([+-]?\d+)\s*\/\s*([+-]?\d+)$/.exec(s))) {
+      if (BigInt(m[2]) === 0n) return { err: "denominator is 0 — a fraction can't divide by zero." };
+      q = Q(BigInt(m[1]), BigInt(m[2]));
+    } else if (/^[+-]?(\d+\.?|\.)?$/.test(s) || /^[+-]?\d+\s*\/\s*[+-]?$/.test(s))
+      return { err: "unfinished — e.g. 2, −0.5 or 1/3.", partial: true };
+    else return { err: "not a number — use an integer (2), a decimal (−0.5) or a fraction (1/3)." };
+    if (babs(q.n) > BigInt(LIMIT) * q.d) return { err: `too large — keep entries between −${LIMIT} and ${LIMIT}.` };
+    return { q };
   }
+  /** "3", "-2", "0.5", "1/3", "-2/7" → rational, or null if it isn't a number we accept */
+  function parseQ(str) { return checkEntry(str).q || null; }
 
   /** Gram–Schmidt, exactly. Stops at the first v_k = 0 (the next shadow would divide by 0). */
   function gsExact(ws) {
@@ -55,7 +67,7 @@
     const [a, b, c] = ws;                                       // det of the rows = det[w1 w2 w3]
     const m2 = (i, j) => qsub(qmul(b[i], c[j]), qmul(b[j], c[i]));
     const det = qadd(qsub(qmul(a[0], m2(1, 2)), qmul(a[1], m2(0, 2))), qmul(a[2], m2(0, 1)));
-    return { v, coef, zeroAt, det };
+    return { w: ws, v, coef, zeroAt, det };
   }
 
   // ------------------------------------------------------------------ exact display
@@ -141,11 +153,140 @@
     return Object.assign({ yaw: best.yaw, pitch: best.pitch, zoom, target }, floor ? { up, ref } : {});
   }
 
+  // ------------------------------------------------------------------ words that depend on the computation
+  // Steps: 0 = your vectors · 1–3 = v1, v2, v3 · 4–6 = u1, u2, u3 (one vector per step).
+  const kindOf = (st) => (st === 0 ? { type: "w" } : st <= 3 ? { type: "v", k: st - 1 } : { type: "u", k: st - 4 });
+  const SUB = ["₁", "₂", "₃"];
+  const WAITING = "Waiting for valid input: fix the highlighted entry. Nothing is computed until all nine entries are numbers.";
+
+  /** Caption and CAUTION headline for step st, conditioned on the first zero residual v_m (G.zeroAt = m − 1).
+      base = the captions in steps.js, which describe a run that succeeds. */
+  function stepText(G, st, base) {
+    const stop = G.zeroAt, K = kindOf(st);
+    if (stop < 0) return { caption: base[st], caution: "" };
+    const m = stop + 1;
+    const span = Array.from({ length: stop }, (_, j) => `w_${j + 1}`).join(", ");
+    let caption = base[st], caution;
+    if (K.type === "w") caution = "Not a basis: $\\det[\\,w_1\\ w_2\\ w_3\\,] = 0$ — watch where (GS) breaks";
+    else if (K.type === "v") {
+      const k = K.k + 1;
+      if (K.k < stop) caution = `Not a basis — (GS) will break at $v_${m}$`;
+      else if (K.k === stop) {
+        caution = m === 1 ? "$w_1 = \\zero$: (GS) can't even start"
+          : `$v_${m} = \\zero$: $w_${m}$ lies in $\\Span\\{${span}\\}$ — (GS) stops here`;
+        caption = m === 1
+          ? "$w_1 = \\zero$, so $v_1 = w_1 = \\zero$: there is no direction to start from, and the next shadow would divide by $\\norm{v_1}^2 = 0$ — (GS) stops here."
+          : m === 2
+            ? "$v_2 = \\zero$: $w_2$ is a multiple of $w_1$, so its shadow on $v_1$ is all of it. (GS) stops — the next shadow would divide by $\\norm{v_2}^2 = 0$."
+            : "$v_3 = \\zero$: $w_3$ already lies in the plane $\\Span\\{v_1, v_2\\}$, so its shadow is all of it — only two independent directions, so no orthogonal basis of $\\R^3$.";
+      } else {
+        caution = `(GS) stopped at $v_${m}$: there is no $v_${k}$`;
+        caption = `(GS) stopped at $v_${m} = \\zero$, so $v_${k}$ is never computed: its shadow on $v_${m}$ would divide by $\\norm{v_${m}}^2 = 0$. The picture still shows where it broke.`;
+      }
+    } else {
+      const k = K.k + 1;
+      if (K.k < stop) {
+        caution = `Normalizing $v_${k}$ works — but $v_${m} = \\zero$ is coming`;
+        caption = `$u_${k} = v_${k} / \\norm{v_${k}}$ still works, since $v_${k} \\ne \\zero$ — but $v_${m} = \\zero$ is coming, so this will not finish as an orthonormal basis.`;
+      } else if (K.k === stop) {
+        caution = `$v_${m} = \\zero$ can't be normalized ($\\div 0$): not a basis in, no orthonormal basis out`;
+        caption = m === 1
+          ? "Nothing to normalize: $v_1 = \\zero$ has length 0, and $\\zero / 0$ is undefined — there is no $u_1$."
+          : `$v_${m} = \\zero$ has length 0, so $v_${m} / \\norm{v_${m}}$ would divide by 0 — there is no $u_${m}$. ` +
+            (m === 3 ? "$u_1, u_2$ are orthonormal, but they span only a plane." : "Only $u_1$ exists.");
+      } else {
+        caution = `(GS) stopped at $v_${m}$: there is no $u_${k}$`;
+        caption = `No $u_${k}$: (GS) stopped at $v_${m} = \\zero$, so ${m === 1 ? "nothing could be normalized" : "only $u_1$ was computed"} — dependent vectors in, no orthonormal basis out.`;
+      }
+    }
+    return { caption, caution };
+  }
+
+  /** The results under the inputs for step st, as HTML (tex = KaTeX renderer). Pure, so tests can read it. */
+  function panelHTML(G, st, tex) {
+    const t = (s, cls = "") => `<div class="ln t ${cls}">${s}</div>`;
+    const m = (s, cls = "") => `<div class="ln small static ${cls}"><span class="body">${tex("\\displaystyle " + s)}</span></div>`;
+    const K = kindOf(st), stop = G.zeroAt, ok = stop === -1;
+    const dz = isZero(G.det);
+    let h = m(`\\det[\\,w_1\\ w_2\\ w_3\\,] = ${texQ(G.det)}` + (dz ? "\\quad \\coral{\\text{not a basis}}" : ""),
+      K.type === "w" ? (dz ? "coral cur" : "ans cur") : "past");
+    const vLine = (k) => {
+      let lhs = `v_${k + 1} = w_${k + 1}`;
+      G.coef[k].forEach((c, j) => {
+        const neg = c.n < 0n, a = neg ? Q(-c.n, c.d) : c;
+        lhs += ` ${neg ? "+" : "-"} \\mint{${texQ(a)}\\,v_${j + 1}}`;
+      });
+      return k === stop ? `${lhs} = \\zero` : `${lhs} = ${texFactored(G.v[k])}`;
+    };
+    // why (GS) can't go on after v_m = 0
+    const why = () => {
+      const k = stop + 1;
+      let r = m(k === 1 ? `\\coral{w_1 = \\zero:\\ \\text{nothing to start from}}`
+        : `\\coral{w_${k} \\in \\Span\\{${Array.from({ length: k - 1 }, (_, j) => `w_${j + 1}`).join(", ")}\\}}`);
+      r += k < 3 ? m(`\\coral{\\text{can't continue: the next shadow divides by } \\norm{v_${k}}^2 = 0}`)
+        : m(`\\coral{\\text{only two independent directions: no (OB) of } \\R^3}`);
+      return r;
+    };
+    if (K.type === "v") {
+      h += t("gram–schmidt · dot product");
+      const last = ok ? K.k : Math.min(K.k, stop);
+      for (let k = 0; k <= last; k++) h += m(vLine(k), k === stop ? "coral" + (k === K.k ? " cur" : "") : k === K.k ? "ans cur" : "past");
+      // nearly dependent: exact arithmetic keeps a tiny v_k, which is still a perfectly good direction
+      const k = K.k;
+      if (k <= last && k !== stop && k > 0) {
+        const rv = qnum(vdot(G.v[k], G.v[k])), rw = qnum(vdot(G.w[k], G.w[k]));
+        if (rv < 1e-6 * rw) h += t(`v${SUB[k]} is tiny but not 0 — exact fractions keep its direction`);
+      }
+      if (!ok && K.k >= stop) h += why();
+      if (!ok && K.k > stop) h += t(`(gs) stopped at v${SUB[stop]} — v${SUB[K.k]} is never computed`, "coral");
+    }
+    if (K.type === "u") {
+      if (ok) {
+        h += t("the orthogonal basis");
+        h += m(G.v.map((v, j) => `v_${j + 1} = ${texFactored(v)}`).join(", \\ "), "past");
+      } else {
+        h += t(stop === 0 ? "computed orthogonal vectors · none" : "computed orthogonal vectors");
+        if (stop > 0) h += m(G.v.slice(0, stop).map((v, j) => `v_${j + 1} = ${texFactored(v)}`).join(", \\ "), "past");
+        h += t(`(gs) stopped: v${SUB[stop]} = 0`, "coral");
+      }
+      h += t("normalize · u = v / ‖v‖");
+      const last = ok ? K.k : Math.min(K.k, stop);
+      for (let k = 0; k <= last; k++) {
+        if (k === stop) {
+          h += m(`u_${k + 1} = \\frac{v_${k + 1}}{\\norm{v_${k + 1}}}: \\quad \\strike{\\div\\, 0}`, k === K.k ? "cur" : "");
+          h += t("not a basis in → no orthonormal basis out", "coral");
+        } else h += m(`\\norm{v_${k + 1}} = ${normTex(G.v[k])} \\ \\Rightarrow\\ u_${k + 1} = ${unitTex(G.v[k])}`, k === K.k ? "ans cur" : "past");
+      }
+      if (!ok && K.k > stop) h += t(`no u${SUB[K.k]}: (gs) stopped at v${SUB[stop]}`, "coral");
+      if (ok && K.k === 2) {
+        // exact check: the primitive integer vectors are pairwise orthogonal, so <u_i,u_j> = δ_ij
+        const ps = G.v.map((v) => factor(v).p);
+        const orth = ps.every((p, i) => ps.every((q, j) => i === j || p.reduce((s, x, n) => s + x * q[n], 0n) === 0n));
+        h += m(orth ? "\\ip{u_i}{u_j} = \\delta_{ij} \\ \\checkmark" : "\\coral{\\text{check failed}}", orth ? "" : "coral");
+      }
+    }
+    return h;
+  }
+
+  /** "Predict before reveal" for the step about to be shown, or null. One prompt: will v3 be 0? */
+  function predictFor(G, st) {
+    if (st !== 3 || (G.zeroAt !== -1 && G.zeroAt !== 2)) return null;     // only when v1, v2 exist
+    const zero = G.zeroAt === 2;
+    return {
+      q: "Before $v_3$: will the residual $v_3 = w_3 - (\\text{shadow on } \\Span\\{v_1, v_2\\})$ be $\\zero$? Hint: look at the determinant.",
+      options: ["yes, $v_3 = \\zero$", "no, $v_3 \\ne \\zero$"],
+      answer: zero ? 0 : 1,
+      why: zero
+        ? "$\\det[\\,w_1\\ w_2\\ w_3\\,] = 0$ while $v_1, v_2 \\ne \\zero$, so $w_3$ lies in $\\Span\\{w_1, w_2\\} = \\Span\\{v_1, v_2\\}$: its shadow is all of it, nothing is left over."
+        : `$\\det[\\,w_1\\ w_2\\ w_3\\,] = ${texQ(G.det)} \\ne 0$, so $w_3$ is not in the plane $\\Span\\{v_1, v_2\\}$: something is left over.`,
+    };
+  }
+
   // ------------------------------------------------------------------ the scene
   function create(container, sc, api) {
     const cfg = sc.sandbox;
     sc.space = sc.space || { axes: 3, plane: null };
-    const sub = ["₁", "₂", "₃"];
+    sc.baseCaptions = sc.baseCaptions || sc.steps.map((s) => s.caption);
     let texts = cfg.start.map((w) => w.map(String));
     // ?w=1,2,-1;1,3,1;2,5,0 in the URL preloads a basis (handy for sharing a specific example)
     const q = /[?&]w=([^&#]+)/.exec(location.search);
@@ -153,34 +294,57 @@
       const rows = decodeURIComponent(q[1]).split(";").map((r) => r.split(",").map((x) => x.trim()));
       if (rows.length === 3 && rows.every((r) => r.length === 3 && r.every((x) => parseQ(x) !== null))) texts = rows;
     }
-    let ws = texts.map((row) => row.map(parseQ));
+    let entries = texts.map((row) => row.map(checkEntry));
+    let valid = true;                     // all nine entries are numbers: the results below belong to them
+    let pending = false;                  // typed but not committed yet (debounce): results are dimmed
+    let ws = entries.map((row) => row.map((e) => e.q));
     let G = gsExact(ws);
     let step = 0, space = null, timer = 0;
 
     // ---------- panel: inputs and presets are built once (typing keeps focus); results re-render
     const lines = api.linesEl;
+    const nth = ["1st", "2nd", "3rd"];
     lines.innerHTML = `<div class="sb-panel">
       <div class="ln t">your vectors · type, or pick</div>
       <div class="sb-presets">${cfg.presets.map((p, i) => `<button type="button" data-i="${i}">${p.label}</button>`).join("")}</div>
       ${[0, 1, 2].map((k) => `<div class="sb-row"><span class="sb-lab">${api.tex(`w_${k + 1} =`)}</span><span class="sb-par">(</span>` +
-        [0, 1, 2].map((i) => `<input class="sb-in" inputmode="text" autocomplete="off" spellcheck="false" data-k="${k}" data-i="${i}" aria-label="w${sub[k]} entry ${i + 1}">`).join('<span class="sb-par">,</span>') +
-        `<span class="sb-par">)</span></div>`).join("")}
+        [0, 1, 2].map((i) => `<input class="sb-in" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" data-k="${k}" data-i="${i}" ` +
+          `aria-label="w${SUB[k]} entry ${i + 1}" aria-describedby="sb-e-${k}-${i}" aria-invalid="false">`).join('<span class="sb-par">,</span>') +
+        `<span class="sb-par">)</span></div>` +
+        `<div class="sb-err" id="sb-err-${k}" aria-live="polite" hidden>${[0, 1, 2].map((i) => `<span id="sb-e-${k}-${i}" hidden></span>`).join("")}</div>`).join("")}
       <div id="sb-out"></div></div>`;
     const inputs = [...lines.querySelectorAll(".sb-in")];
     const out = lines.querySelector("#sb-out");
-    const fillInputs = () => inputs.forEach((el) => { el.value = texts[+el.dataset.k][+el.dataset.i]; el.classList.remove("bad"); });
+    const inputAt = (k, i) => inputs[3 * k + i];
+
+    /** show (msg) or clear (null) the error of one field: coral underline, aria-invalid, and the
+        message under its row, which the field names via aria-describedby */
+    function showErr(k, i, msg) {
+      const el = inputAt(k, i), span = lines.querySelector(`#sb-e-${k}-${i}`);
+      el.classList.toggle("bad", !!msg);
+      el.setAttribute("aria-invalid", msg ? "true" : "false");
+      span.textContent = msg ? `w${SUB[k]}, ${nth[i]} entry: ${msg}` : "";
+      span.hidden = !msg;
+      const row = lines.querySelector(`#sb-err-${k}`);
+      row.hidden = [0, 1, 2].every((j) => lines.querySelector(`#sb-e-${k}-${j}`).hidden);
+    }
+    const paintErrors = () => entries.forEach((row, k) => row.forEach((e, i) => showErr(k, i, e.err || null)));
+    const fillInputs = () => inputs.forEach((el) => { el.value = texts[+el.dataset.k][+el.dataset.i]; });
     fillInputs();
 
     inputs.forEach((el) => {
+      const k = +el.dataset.k, i = +el.dataset.i;
       el.addEventListener("input", () => {
-        texts[+el.dataset.k][+el.dataset.i] = el.value;
-        el.classList.toggle("bad", parseQ(el.value) === null);
-        clearTimeout(timer); timer = setTimeout(commit, 350);
+        texts[k][i] = el.value;
+        if (checkEntry(el.value).q) showErr(k, i, null);           // fixed: say so at once; new errors wait for the pause
+        pending = true; out.classList.add("pending");
+        clearTimeout(timer); timer = setTimeout(commit, 450);
       });
       el.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { clearTimeout(timer); commit(); el.blur(); }
+        if (e.key === "Enter") { e.preventDefault(); commit(); el.blur(); }
         if (e.key === "Escape") el.blur();
       });
+      el.addEventListener("blur", () => { if (pending) commit(); });
       el.addEventListener("focus", () => el.select());
     });
     lines.querySelectorAll(".sb-presets button").forEach((b) => b.addEventListener("click", (e) => {
@@ -193,36 +357,56 @@
       fillInputs(); commit();
     }));
 
+    // the picture says so too while the input is not usable
+    const wait = document.createElement("div");
+    wait.className = "sb-wait"; wait.hidden = true;
+    wait.innerHTML = "<span>waiting for valid input</span>";
+
+    /** Validate all nine entries; recompute only from valid input. Invalid → nothing computed is shown. */
     function commit() {
-      const parsed = texts.map((row) => row.map(parseQ));
-      if (parsed.some((row) => row.some((x) => x === null))) return;       // keep the last good input
-      if (parsed.some((row) => row.some((x) => Math.abs(qnum(x)) > 99))) { api.toast("keep entries between −99 and 99"); return; }
-      ws = parsed; G = gsExact(ws);
+      clearTimeout(timer); timer = 0; pending = false;
+      entries = texts.map((row) => row.map(checkEntry));
+      valid = entries.every((row) => row.every((e) => e.q));
+      paintErrors();
+      if (valid) { ws = entries.map((row) => row.map((e) => e.q)); G = gsExact(ws); }
       build();
       if (space) space.morph();
-      if (api.setCaution) api.setCaution(sc.steps[step].caution);
+      refreshWords();
       renderPanel();
     }
-
-    // ---------- the steps: 0 = your vectors · 1–3 = v1, v2, v3 · 4–6 = u1, u2, u3 (one vector per step)
-    const kindOf = (st) => (st === 0 ? { type: "w" } : st <= 3 ? { type: "v", k: st - 1 } : { type: "u", k: st - 4 });
+    function refreshWords() {
+      wait.hidden = valid;
+      if (api.setCaution) api.setCaution(sc.steps[step].caution);
+      if (api.setCaption) api.setCaption(sc.steps[step].caption);
+    }
 
     // ---------- picture. Ids: w_j "w"+j, v_j/u_j "a"+j (so v_j morphs into u_j), markers "r"+i+j
     function build() {
       const Vk = VV();
+      if (!valid) return buildWaiting(Vk);
       const num = (v) => v.map(qnum);
       const W = ws.map(num), Vn = G.v.map(num);
       const stop = G.zeroAt, ok = stop === -1;
       const live = (j) => j < Vn.length && j !== stop;                 // v_j exists and is not 0
       const U = Vn.map((v, j) => (live(j) ? Vk.unit(v) : null));
       const hasPlane = live(0) && live(1);
+      const big = Math.max(...[...W, ...Vn].map((v) => Vk.norm(v)), 1e-12);
+      // a vector too short to draw (nearly dependent input) still exists: show it as a labelled dot
+      const vec = (to, o) => (Vk.norm(to) < 0.02 * big
+        ? Object.assign({ kind: "dot", at: [0, 0, 0], tag: "tiny ≠ 0" }, o, { to: undefined })
+        : Object.assign({ kind: "vec", to }, o));
       let sheet = null, floor = null;
       if (hasPlane) {
-        // the sheet covers v1, v2 and, when GS fails at k = 3, the culprit w3 lying in it
-        const co = (w) => [Vk.dot(w, Vn[0]) / Vk.dot(Vn[0], Vn[0]), Vk.dot(w, Vn[1]) / Vk.dot(Vn[1], Vn[1])];
-        const cs = [[1, 1], co(W[2])];
+        // the sheet covers v1, v2 and, when GS fails at k = 3, the culprit w3 lying in it; edges of
+        // very different lengths are evened out for the picture (same plane, still readable)
+        let a = Vn[0], b = Vn[1];
+        const La = Vk.norm(a), Lb = Vk.norm(b);
+        if (Lb < 0.25 * La) b = Vk.mul(0.6 * La / Lb, b);
+        if (La < 0.25 * Lb) a = Vk.mul(0.6 * Lb / La, a);
+        const co = (w) => [Vk.dot(w, a) / Vk.dot(a, a), Vk.dot(w, b) / Vk.dot(b, b)];
+        const cs = [co(Vn[0]), co(Vn[1]), co(W[2])];
         const lo = (i) => Math.min(-0.06, ...cs.map((c) => c[i] - 0.15)), hi = (i) => Math.max(1.15, ...cs.map((c) => c[i] + 0.15));
-        sheet = { a: Vn[0], b: Vn[1], s: [lo(0), hi(0)], t: [lo(1), hi(1)], label: [hi(0), hi(1)] };
+        sheet = { a, b, s: [lo(0), hi(0)], t: [lo(1), hi(1)], label: [hi(0), hi(1)] };
         // the floor: up = its normal, turned toward v3 if there is one (else upward in z)
         let n = Vk.unit(cross(Vn[0], Vn[1]));
         const side = live(2) ? Vk.dot(n, Vn[2]) : (n[2] !== 0 ? n[2] : 1);
@@ -250,32 +434,30 @@
           camVecs = W;
         } else if (K.type === "v") {
           const k = ok ? K.k : Math.min(K.k, stop);                     // after a failure, keep showing it
-          for (let j = 0; j < k; j++) els["a" + j] = { kind: "vec", to: Vn[j], label: `v_${j + 1}` };
+          for (let j = 0; j < k; j++) els["a" + j] = vec(Vn[j], { label: `v_${j + 1}` });
           for (let j = k + 1; j < 3; j++) if (Vk.norm(W[j]) > 1e-12) els["w" + j] = { kind: "vec", to: W[j], op: 0.25 };
           const wk = W[k], vk = Vn[k], sh = Vk.sub(wk, vk);             // w_k = shadow + v_k
           if (Vk.norm(wk) > 1e-12 && k > 0) els["w" + k] = { kind: "vec", to: wk, label: `w_${k + 1}` };
           if (k > 0 && Vk.norm(sh) > 1e-9) {
             els.sh = { kind: "vec", to: sh, c: "mint", tag: "shadow", delay: 0.2 };
-            if (Vk.norm(vk) > 1e-9) {
+            if (Vk.norm(vk) > 0.02 * big) {
               els.dr = { kind: "drop", from: wk, to: sh, delay: 0.2 };
               els.rs = { kind: "right", at: sh, a: vk, b: Vk.mul(-1, sh), s: 0.16 * Math.min(Vk.norm(vk), Vk.norm(sh)), delay: 0.5 };
             }
           }
           if (k === stop) els["a" + k] = zeroDot(k);
-          else els["a" + k] = { kind: "vec", to: vk, c: "yellow", label: k === 0 ? "v_1 = w_1" : `v_${k + 1}`, delay: k ? 0.5 : 0 };
+          else els["a" + k] = vec(vk, { c: "yellow", label: k === 0 ? "v_1 = w_1" : `v_${k + 1}`, delay: k ? 0.5 : 0 });
           right(els, Array.from({ length: k + 1 }, (_, j) => j).filter(live).map((j) => [j, Vn[j]]), 0.7);
           if (k === 2 && hasPlane) { els.plane = { kind: "plane" }; useFloor = true; high = !ok; }
           camVecs = [...Vn.slice(0, k + 1).filter((v, j) => live(j)), ...(Vk.norm(wk) > 1e-12 ? [wk] : [])];
         } else {
-          const lastLive = ok ? 2 : stop - 1;
           const k = Math.min(K.k, ok ? 2 : stop);
           const list = [];
           for (let j = 0; j < Vn.length; j++) {
             if (j === stop) { els["a" + j] = zeroDot(j); continue; }
             const isU = j <= k;
             const to = isU ? U[j] : Vn[j];
-            els["a" + j] = { kind: "vec", to, c: isU && j === k && ok ? "yellow" : isU && j === k && j <= lastLive ? "yellow" : "chalk",
-              label: isU ? `u_${j + 1}` : `v_${j + 1}` };
+            els["a" + j] = vec(to, { c: isU && j === k ? "yellow" : "chalk", label: isU ? `u_${j + 1}` : `v_${j + 1}` });
             list.push([j, to]);
           }
           right(els, list, 0.3);
@@ -283,8 +465,10 @@
           useFloor = hasPlane; high = !ok;
           camVecs = list.map((l) => l[1]);
         }
+        const T = stepText(G, st, sc.baseCaptions);
         sc.steps[st].els = els;
-        sc.steps[st].caution = cautionFor(K);
+        sc.steps[st].caution = T.caution;
+        sc.steps[st].caption = T.caption;
         sc.steps[st].cam = fitCam(camVecs.length ? camVecs : [[1, 0, 0]], useFloor ? floor : null,
           K.type === "u" && K.k === 2 ? 300 : 330, useFloor && high ? [34, 48] : null);
       }
@@ -292,81 +476,41 @@
       sc.space.axes = Math.max(1.6, 1.15 * Math.max(...all));
     }
 
-    // ---------- not a basis → every step is a CAUTION step (as in 005), headline tracking where (GS) breaks
-    function cautionFor(K) {
-      const stop = G.zeroAt;
-      if (stop < 0) return "";
-      const m = stop + 1, sub = (i) => `${i}`;
-      const span = Array.from({ length: stop }, (_, j) => `w_${j + 1}`).join(", ");
-      const breaks = m === 1 ? "$w_1 = \\zero$: (GS) can't even start"
-        : `$v_${sub(m)} = \\zero$: $w_${sub(m)}$ lies in $\\Span\\{${span}\\}$ — (GS) stops here`;
-      if (K.type === "w") return "Not a basis: $\\det[\\,w_1\\ w_2\\ w_3\\,] = 0$ — watch where (GS) breaks";
-      if (K.type === "v") {
-        if (K.k < stop) return `Not a basis — (GS) will break at $v_${sub(m)}$`;
-        if (K.k === stop) return breaks;
-        return `(GS) stopped at $v_${sub(m)}$: there is no $v_${sub(K.k + 1)}$`;
+    /** Invalid input: draw only the rows that are fully valid (they are input, not results), faded. */
+    function buildWaiting(Vk) {
+      const W = entries.map((row) => (row.every((e) => e.q) ? row.map((e) => qnum(e.q)) : null));
+      const els = {}, cv = [];
+      W.forEach((w, j) => {
+        if (!w) return;
+        if (Vk.norm(w) < 1e-12) els["w" + j] = { kind: "dot", at: [0, 0, 0], c: "chalk", op: 0.5, label: `w_${j + 1} = \\zero` };
+        else { els["w" + j] = { kind: "vec", to: w, label: `w_${j + 1}`, op: 0.45 }; cv.push(w); }
+      });
+      sc.space.plane = null;
+      for (let st = 0; st < 7; st++) {
+        sc.steps[st].els = els;
+        sc.steps[st].caution = "";
+        sc.steps[st].caption = WAITING;
+        sc.steps[st].cam = fitCam(cv.length ? cv : [[1, 0, 0], [0, 1, 0], [0, 0, 1]], null, 330);
       }
-      if (K.k < stop) return `Normalizing $v_${sub(K.k + 1)}$ works — but $v_${sub(m)} = \\zero$ is coming`;
-      return `$v_${sub(m)} = \\zero$ can't be normalized ($\\div 0$): not a basis in, no orthonormal basis out`;
+      sc.space.axes = Math.max(1.6, 1.15 * Math.max(0, ...cv.map((v) => Math.max(...v.map(Math.abs)))));
     }
 
     // ---------- panel results
     function renderPanel() {
-      const t = (s) => `<div class="ln t">${s}</div>`;
-      const m = (s, cls = "") => `<div class="ln small static ${cls}"><span class="body">${api.tex("\\displaystyle " + s)}</span></div>`;
-      const K = kindOf(step), stop = G.zeroAt, ok = stop === -1;
-      const dz = isZero(G.det);
-      let h = m(`\\det[\\,w_1\\ w_2\\ w_3\\,] = ${texQ(G.det)}` + (dz ? "\\quad \\coral{\\text{not a basis}}" : ""), K.type === "w" ? (dz ? "coral" : "ans") : "past");
-      const vLine = (k) => {
-        let lhs = `v_${k + 1} = w_${k + 1}`;
-        G.coef[k].forEach((c, j) => {
-          const neg = c.n < 0n, a = neg ? Q(-c.n, c.d) : c;
-          lhs += ` ${neg ? "+" : "-"} \\mint{${texQ(a)}\\,v_${j + 1}}`;
-        });
-        return k === stop ? `${lhs} = \\zero` : `${lhs} = ${texFactored(G.v[k])}`;
-      };
-      const why = () => {
-        const k = stop + 1;
-        let r = m(k === 1 ? `\\coral{w_1 = \\zero:\\ \\text{nothing to start from}}`
-          : `\\coral{w_${k} \\in \\Span\\{${Array.from({ length: k - 1 }, (_, j) => `w_${j + 1}`).join(", ")}\\}}`);
-        if (k < 3) r += m(`\\coral{\\text{stop: next shadow} \\div \\norm{v_${k}}^2 = \\div 0}`);
-        return r;
-      };
-      if (K.type === "v") {
-        h += t("gram–schmidt · dot product");
-        const last = ok ? K.k : Math.min(K.k, stop);
-        for (let k = 0; k <= last; k++) h += m(vLine(k), k === stop ? "coral" : k === K.k ? "ans" : "past");
-        if (!ok && K.k >= stop) h += why();
-        if (!ok && K.k > stop) h += t(`(gs) stopped at v${"₁₂₃"[stop]} — there is no v${"₁₂₃"[K.k]}`);
+      out.classList.remove("pending");
+      if (!valid) {
+        const n = entries.flat().filter((e) => !e.q).length;
+        out.innerHTML = `<div class="ln t coral">waiting for valid input</div>` +
+          `<p class="sb-note">Fix the highlighted ${n === 1 ? "entry" : `${n} entries`}: results appear once all nine entries are numbers.</p>`;
+        return;
       }
-      if (K.type === "u") {
-        h += t("the orthogonal basis");
-        h += m(G.v.map((v, j) => (j === stop ? `v_${j + 1} = \\zero` : `v_${j + 1} = ${texFactored(v)}`)).join(", \\ "), "past");
-        h += t("normalize · u = v / ‖v‖");
-        const last = ok ? K.k : Math.min(K.k, stop);
-        for (let k = 0; k <= last; k++) {
-          if (k === stop) {
-            h += m(`u_${k + 1} = \\frac{v_${k + 1}}{\\norm{v_${k + 1}}}: \\quad \\strike{\\div\\, 0}`);
-            h += t("not a basis in → no orthonormal basis out");
-          } else h += m(`\\norm{v_${k + 1}} = ${normTex(G.v[k])} \\ \\Rightarrow\\ u_${k + 1} = ${unitTex(G.v[k])}`, k === K.k ? "ans" : "past");
-        }
-        if (ok && K.k === 2) {
-          // exact check: the primitive integer vectors are pairwise orthogonal, so <u_i,u_j> = δ_ij
-          const ps = G.v.map((v) => factor(v).p);
-          const orth = ps.every((p, i) => ps.every((q, j) => i === j || p.reduce((s, x, n) => s + x * q[n], 0n) === 0n));
-          h += m(orth ? "\\ip{u_i}{u_j} = \\delta_{ij} \\ \\checkmark" : "\\coral{\\text{check failed}}", orth ? "" : "coral");
-        }
-      }
-      out.innerHTML = h;
-      for (const el of out.querySelectorAll(".ln")) {
-        el.style.fontSize = "";
-        const w = el.scrollWidth, avail = lines.clientWidth;
-        if (w > avail) el.style.fontSize = `${(parseFloat(getComputedStyle(el).fontSize) * avail / w * 0.98).toFixed(1)}px`;
-      }
+      out.innerHTML = panelHTML(G, step, api.tex);
+      if (api.fitLines) api.fitLines(out);
     }
 
     build();
     space = window.GS_SPACE3D.create(container, sc, api);
+    container.appendChild(wait);
     renderPanel();
 
     return {
@@ -374,14 +518,26 @@
         step = k;
         build();
         space.setStep(k, animate, mode);
+        wait.hidden = valid;
         renderPanel();
       },
+      /** Moving on into a calculation needs input that is complete and valid. */
+      canAdvance() {
+        if (pending) commit();
+        if (valid) return true;
+        api.toast("fix the highlighted entry first");
+        const bad = inputs.find((el) => el.getAttribute("aria-invalid") === "true");
+        if (bad) bad.focus();
+        return false;
+      },
+      predict: (k) => (valid && !pending ? predictFor(G, k) : null),
+      refit() { if (valid && api.fitLines) api.fitLines(out); },
       key: (e) => space.key(e),
       edge: () => space.edge(), auto: () => space.auto(), home: () => space.home(), status: () => space.status(),
       restyle() { space.restyle(); },
-      destroy() { clearTimeout(timer); space.destroy(); },
+      destroy() { clearTimeout(timer); space.destroy(); wait.remove(); },
     };
   }
 
-  window.GS_SANDBOX = { create, gsExact, parseQ, texFactored, unitTex, normTex };
+  window.GS_SANDBOX = { create, gsExact, parseQ, checkEntry, stepText, panelHTML, predictFor, kindOf, texFactored, unitTex, normTex, texQ, WAITING };
 })();

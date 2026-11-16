@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI checks · Gram–Schmidt demo</title>
+<style>
+  body { font: 14px/1.5 Menlo, Consolas, monospace; background: #1E3A2D; color: #EEF3EA; margin: 0; padding: 16px; }
+  h1 { font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: #A6DCA9; }
+  #results div.pass::before { content: "✔ "; color: #A6DCA9; }
+  #results div.fail { color: #F0907F; }
+  #results div.fail::before { content: "✖ "; }
+  #summary { font-weight: 700; margin: 12px 0; }
+  /* the app runs here at real sizes, shown small; it must stay on screen, or the browser throttles its animation frames */
+  #lab { position: fixed; right: 8px; bottom: 8px; transform: scale(0.28); transform-origin: bottom right; pointer-events: none;
+    outline: 4px solid #A6DCA9; }
+  iframe { border: 0; display: block; }
+</style>
+</head>
+<body>
+<h1>Gram–Schmidt demo · UI regression checks</h1>
+<p>Serve the repository over http (e.g. <code>python3 -m http.server</code> from its root) and open this page;
+or run <code>tests/run-ui.sh</code>. Every check drives the real page in an iframe.</p>
+<div id="summary">running…</div>
+<div id="results"></div>
+<div id="lab"></div>
+<script>
+"use strict";
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const results = document.getElementById("results");
+const checks = [];
+const check = (name, fn) => checks.push({ name, fn });
+function assert(cond, msg) { if (!cond) throw new Error(msg); }
+// KaTeX text without spacing. NB: in KaTeX's DOM a fraction's denominator comes before its numerator,
+// so \tfrac{3}{2} reads "23", \tfrac{2}{5}(-1,3) reads "52(−1,3)", and 1/√30 reads "301".
+const flat = (s) => String(s).replace(/[\s​⁡]/g, "");
+
+/** Open the demo at a size; returns helpers bound to that iframe. */
+async function open(hash, w = 1920, h = 1080, query = "") {
+  const lab = document.getElementById("lab");
+  lab.innerHTML = "";
+  const f = document.createElement("iframe");
+  f.width = w; f.height = h;
+  f.src = `../index.html${query}#${hash}`;
+  lab.appendChild(f);
+  await new Promise((r) => f.addEventListener("load", r, { once: true }));
+  const win = f.contentWindow, doc = win.document;
+  await (doc.fonts ? doc.fonts.ready : Promise.resolve());
+  await sleep(350);
+  const $ = (s) => doc.querySelector(s);
+  const P = win.GS_PLAYER;
+  const inputs = () => [...doc.querySelectorAll(".sb-in")];
+  return {
+    win, doc, $, P,
+    state: () => P.state(),
+    out: () => flat($("#sb-out").textContent),
+    panel: () => flat($("#panel-lines").textContent),
+    caption: () => flat($("#caption").textContent),
+    key(k, target) {
+      const ev = new win.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
+      (target || doc.body).dispatchEvent(ev);
+      return ev;
+    },
+    type(k, i, text, enter = true) {
+      const el = inputs()[3 * k + i];
+      el.focus(); el.value = text;
+      el.dispatchEvent(new win.Event("input", { bubbles: true }));
+      if (enter) el.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      return el;
+    },
+    rows(rows) { rows.forEach((r, k) => r.forEach((x, i) => this.type(k, i, String(x), false))); this.type(2, 2, String(rows[2][2])); },
+    preset(prefix) { [...doc.querySelectorAll(".sb-presets button")].find((b) => b.textContent.startsWith(prefix)).click(); },
+    input: (k, i) => inputs()[3 * k + i],
+    errOf(k, i) { const el = inputs()[3 * k + i]; const d = doc.getElementById(el.getAttribute("aria-describedby")); return d && !d.hidden ? d.textContent : ""; },
+  };
+}
+
+// ====================================================================== sandbox input
+check("1/0 (the reported repro): error shown, results withheld, every way of advancing blocked", async () => {
+  const A = await open("006-1");
+  A.preset("e₁");
+  const el = A.type(0, 0, "1/0");
+  assert(el.getAttribute("aria-invalid") === "true", "aria-invalid not set");
+  assert(/denominator is 0/.test(A.errOf(0, 0)), "no denominator message: " + A.errOf(0, 0));
+  assert(el.classList.contains("bad"), "no visual error style");
+  assert(/waitingforvalidinput/.test(A.out()), "results not withheld: " + A.out());
+  assert(!/det/.test(A.out()), "a determinant is still shown");
+  assert(/Waitingforvalidinput/.test(A.caption()), "caption not about waiting: " + A.caption());
+  A.P.next();                                   assert(A.state().step === 1, "P.next advanced");
+  A.key("ArrowRight");                          assert(A.state().step === 1, "→ advanced");
+  A.key(" ");                                   assert(A.state().step === 1, "Space advanced");
+  A.key("PageDown");                            assert(A.state().step === 1, "PageDown advanced");
+  A.$("#next-btn").click();                     assert(A.state().step === 1, "› button advanced");
+  A.$("#caption").click();                      assert(A.state().step === 1, "background click advanced");
+  assert(A.doc.activeElement === el, "the invalid field was not focused for correction");
+  assert(!A.$(".sb-wait").hidden, "picture does not say it is waiting");
+});
+
+check("malformed text, empty and unfinished entries: concise messages, nothing computed", async () => {
+  const A = await open("006-1");
+  A.type(1, 2, "abc");
+  assert(/not a number/.test(A.errOf(1, 2)), A.errOf(1, 2));
+  A.type(2, 0, "");
+  assert(/empty/.test(A.errOf(2, 0)), A.errOf(2, 0));
+  assert(/2entries/.test(A.out()), "count of bad entries: " + A.out());
+  A.type(0, 1, "1/", false);                    // still typing: no message yet, old results dimmed
+  assert(A.$("#sb-out").classList.contains("pending"), "results not dimmed while typing");
+  await A.win.Promise.resolve(); await sleep(650);
+  assert(/unfinished/.test(A.errOf(0, 1)), "partial entry after pause: " + A.errOf(0, 1));
+  A.P.next(); assert(A.state().step === 1, "advanced with bad entries");
+});
+
+check("correcting the entry recomputes determinant, picture and steps consistently", async () => {
+  const A = await open("006-1");
+  A.preset("e₁");
+  A.type(0, 0, "1/0");
+  A.type(0, 0, "2");
+  assert(A.input(0, 0).getAttribute("aria-invalid") === "false", "still invalid");
+  assert(A.errOf(0, 0) === "", "error message left behind");
+  assert(A.$(".sb-wait").hidden, "waiting overlay left behind");
+  assert(/det\[w1w2w3\]=2/.test(A.out()), "determinant not recomputed: " + A.out());
+  A.P.next();
+  assert(A.state().step === 2, "could not advance after fixing");
+  assert(/v1=w1=\(2,0,0\)/.test(A.out()), "v1 not from the corrected input: " + A.out());
+  A.type(1, 1, "3/2");                          // a fraction while on a calculation step
+  assert(/det\[w1w2w3\]=3/.test(A.out()), "det after 3/2: " + A.out());
+  A.type(2, 2, "0.5");                          // a decimal
+  assert(/det\[w1w2w3\]=23gram/.test(A.out()), "det after 0.5 should be 3/2: " + A.out());
+  const svg = A.$("svg.scene").innerHTML;
+  assert(/w/.test(svg) && svg.length > 500, "picture empty after recompute");
+});
+
+check("keys typed inside a coordinate field stay in the field", async () => {
+  const A = await open("006-1");
+  const el = A.input(1, 1);
+  el.focus();
+  for (const k of ["ArrowRight", "ArrowLeft", "Home", "End", " ", "PageDown", "n", "b", "c", "v", "a", "r", "s", "p", "1", "5"]) {
+    const ev = A.key(k, el);
+    assert(!ev.defaultPrevented, `${k} was swallowed by a shortcut`);
+  }
+  assert(A.state().step === 1 && A.state().scene === "006", "a key navigated: " + JSON.stringify(A.state()));
+  assert(!A.doc.documentElement.classList.contains("bright"), "B toggled bright mode while typing");
+  assert(!A.doc.documentElement.classList.contains("captions-off"), "C toggled captions while typing");
+});
+
+// ====================================================================== failure states
+async function walk(A) {                       // all seven steps: [{caption, out, caution}]
+  const seen = [];
+  A.P.go(5, 0, "enter");
+  for (let st = 0; st < 7; st++) {
+    if (st) { A.P.next(); if (A.state().asking) A.P.next(); }
+    seen.push({ caption: A.caption(), out: A.out(), caution: flat(A.$("#caution").textContent), on: A.doc.documentElement.classList.contains("caution") });
+  }
+  return seen;
+}
+
+check("zero first vector: stops at v1, no normalization described as done", async () => {
+  const A = await open("006-1");
+  A.rows([[0, 0, 0], [1, 2, 3], [0, 1, 1]]);
+  const T = await walk(A);
+  assert(T.every((t) => t.on), "not every step is a CAUTION step");
+  assert(/nodirectiontostartfrom/.test(T[1].caption), "v1 caption: " + T[1].caption);
+  assert(/v2isnevercomputed/.test(T[2].caption), "v2 caption: " + T[2].caption);
+  assert(/Nothingtonormalize/.test(T[4].caption), "u1 caption: " + T[4].caption);
+  assert(!/length1|samedirection/.test(T[4].caption + T[5].caption + T[6].caption), "a unit vector is described as produced");
+  for (const st of [4, 5, 6]) {
+    assert(/computedorthogonalvectors·none/.test(T[st].out), `heading at step ${st + 1}: ${T[st].out}`);
+    assert(!/theorthogonalbasis/.test(T[st].out), `'the orthogonal basis' at step ${st + 1}`);
+  }
+});
+
+check("w₂ = 2w₁ preset: panel, caption and banner agree that v3 is never computed", async () => {
+  const A = await open("006-1");
+  A.preset("w₂");
+  const T = await walk(A);
+  assert(/v2=0/.test(T[2].caption) || /v2=0:/.test(T[2].caption), "v2 caption: " + T[2].caption);
+  assert(/v3isnevercomputed/.test(T[3].caption), "v3 caption: " + T[3].caption);
+  assert(!/minusitsshadowontheplane/.test(T[3].caption), "v3 caption still describes computing v3");
+  assert(/v₃isnevercomputed/.test(T[3].out), "panel: " + T[3].out);
+  assert(/thereisnov3/.test(T[3].caution), "banner: " + T[3].caution);
+  assert(/Nou3/.test(T[6].caption), "u3 caption: " + T[6].caption);
+  for (const st of [4, 5, 6]) assert(!/theorthogonalbasis/.test(T[st].out) && /computedorthogonalvectors/.test(T[st].out), `heading at step ${st + 1}`);
+});
+
+check("w₃ = w₁ + w₂ preset: prediction, then the failure explained at v3", async () => {
+  const A = await open("006-1");
+  A.preset("w₃");
+  A.P.go(5, 2, "back");
+  A.P.next();
+  assert(A.state().asking && A.state().step === 3, "no prediction before v3");
+  A.key("Enter");                                   // reveal
+  assert(A.state().step === 4, "Enter did not reveal");
+  assert(/yes,v3=0/.test(flat(A.$("#predict").textContent)), "answer: " + A.$("#predict").textContent);
+  assert(/alreadyliesintheplane/.test(A.caption()), "caption: " + A.caption());
+  assert(/onlytwoindependentdirections/.test(A.out()), "panel does not explain why: " + A.out());
+  A.P.next(); A.P.next(); A.P.next();
+  assert(/thereisnou3/.test(A.caption()) && /spanonlyaplane/.test(A.caption()), "u3 caption: " + A.caption());
+});
+
+check("nearly dependent basis: det 1/1000000, normalized output is the standard basis", async () => {
+  const A = await open("006-1");
+  A.rows([["1", "0", "0"], ["1", "1/1000000", "0"], ["0", "0", "1"]]);
+  assert(/det\[w1w2w3\]=10000001/.test(A.out()), "det should be 1/1000000: " + A.out());
+  A.P.go(5, 2, "back");
+  assert(/v2=w2−1v1=10000001\(0,1,0\)/.test(A.out()), "v2 should be (1/1000000)(0,1,0): " + A.out());
+  assert(/tinybutnot0/.test(A.out()), "tiny-vector note missing");
+  A.P.go(5, 6, "back");
+  const o = A.out();
+  for (const s of ["u1=(1,0,0)", "u2=(0,1,0)", "u3=(0,0,1)", "δij✓", "theorthogonalbasis"]) assert(o.includes(s), `${s} missing: ${o}`);
+});
+
+// ====================================================================== worked examples and scenes
+check("worked examples 002–005 still show the same results", async () => {
+  const A = await open("002-5");
+  assert(A.panel().includes("v2=(−52,56)=52(−1,3)"), "002 v2 = (-2/5, 6/5) = (2/5)(-1,3): " + A.panel());
+  assert(A.panel().includes("=0✓"), "002 check");
+  A.P.go(2, 2, "back");
+  assert(A.panel().includes("u2=101(−1,3)"), "003 u2 = (1/√10)(-1,3): " + A.panel());
+  A.P.go(3, 6, "back");
+  assert(A.panel().includes("v3=61(5,−2,1)"), "004 v3 = (1/6)(5,-2,1): " + A.panel());
+  A.P.go(3, 9, "back");
+  assert(A.panel().includes("u3=301(5,−2,1)") && A.panel().includes("δij✓"), "004 u3 = (1/√30)(5,-2,1): " + A.panel());
+  A.P.go(4, 2, "back");
+  assert(A.panel().includes("v3=(2,5,0)−2(1,2,−1)−(0,1,2)=0"), "005 v3: " + A.panel());
+  const ex = await open("006-1", 1920, 1080, "?w=1,2,-1;1,3,1;1,1,2");
+  ex.P.go(5, 3, "back");
+  assert(ex.out().includes("=61(5,−2,1)"), "sandbox Ex 2.8 v3 = (1/6)(5,-2,1): " + ex.out());
+});
+
+check("predict prompts: ask, ← closes, reveal explains, P turns them off", async () => {
+  const A = await open("004-4");
+  A.P.next();
+  assert(A.state().asking && A.state().step === 4, "no prompt before step 5");
+  assert(!A.$("#predict").hidden, "card hidden");
+  A.key("ArrowLeft");
+  assert(!A.state().asking && A.state().step === 4, "← did not just close the prompt");
+  A.P.next();
+  A.$(".pr-opt[data-i='1']").click();
+  A.$(".pr-go").click();
+  assert(A.state().step === 5 && /Right/.test(A.$("#predict").textContent), "reveal / verdict: " + A.$("#predict").textContent);
+  A.key("r");
+  assert(A.$("#predict").hidden, "answer card stays after replay");
+  A.key("p");
+  A.P.go(3, 8, "back"); A.P.next();
+  assert(!A.state().asking && A.state().step === 10, "P did not turn prompts off");
+  A.key("p");
+  A.P.go(4, 0, "enter"); A.P.next();
+  assert(A.state().asking, "005 prompt missing after P back on");
+  A.key("Escape");
+  assert(!A.state().asking && A.state().step === 1, "Esc did not close");
+});
+
+check("navigation, replay, captions, notes, bright mode, menus", async () => {
+  const A = await open("001-1");
+  const html = A.doc.documentElement;
+  A.key("ArrowRight"); assert(A.state().step === 2, "→");
+  A.key("ArrowLeft"); assert(A.state().step === 1, "←");
+  A.key("3"); assert(A.state().scene === "003", "number key");
+  A.key("r"); assert(A.state().scene === "003" && A.state().step === 1, "replay moved");
+  A.key("c"); assert(html.classList.contains("captions-off"), "C"); A.key("c");
+  A.key("b"); assert(html.classList.contains("bright"), "B");
+  assert(/clips\/bright\//.test(A.$(".clip-layer img").src), "bright clips not used");
+  A.key("b");
+  A.key("n"); await sleep(900);
+  const fr = A.$("#frame"), ho = A.$("#handout");
+  assert(fr.scrollTop + fr.clientHeight / 2 > ho.offsetTop, "N did not scroll to the notes");
+  assert(/Lemma2\.5/.test(flat(A.$("#ho-body").textContent)), "notes content");
+  A.$("#ho-up").click(); await sleep(900);
+  assert(fr.scrollTop < 5, "back to the slide");
+  A.$("#menu-btn").click(); assert(A.$("#menu").classList.contains("open"), "menu");
+  A.$("#menu").children[0].click(); assert(A.state().scene === "001", "menu jump");
+  A.key("s"); assert(A.$("#settings").classList.contains("open"), "settings");
+  assert(/Predictprompts/.test(flat(A.$("#settings").textContent)), "P row in settings");
+  A.key("Escape"); assert(!A.$("#settings").classList.contains("open"), "Esc closes settings");
+  A.P.go(0, 0, "enter");
+  assert(/linearlyindependentlist/.test(flat(A.$("#ho-body").textContent)), "theorem-scope note missing from 001 notes");
+});
+
+check("3D: edge-on view, auto-rotate, camera reset, drag", async () => {
+  const A = await open("004-7");
+  const L = () => A.P.live().status();
+  A.key("v"); assert(L().edge, "V edge-on"); A.key("v"); assert(!L().edge, "V back");
+  A.key("a"); assert(L().auto, "A auto"); A.key("a"); assert(!L().auto, "A off");
+  A.key("v"); A.key("Home"); assert(!L().edge, "Home resets the view");
+  await sleep(1000);
+  const svg = A.$("svg.scene"), before = svg.innerHTML, r = svg.getBoundingClientRect();
+  A.key("a");
+  const pe = (type, x, y) => svg.dispatchEvent(new A.win.PointerEvent(type, { pointerId: 7, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  pe("pointerdown", r.left + 300, r.top + 300); pe("pointermove", r.left + 380, r.top + 330); pe("pointerup", r.left + 380, r.top + 330);
+  assert(!L().auto, "drag did not stop auto-rotate");
+  await sleep(200);
+  assert(svg.innerHTML !== before, "drag did not turn the picture");
+  const stepBefore = A.state().step;
+  svg.dispatchEvent(new A.win.MouseEvent("click", { bubbles: true }));
+  assert(A.state().step === stepBefore, "a click in the picture changed the step");
+});
+
+// ====================================================================== layout at target sizes
+const SIZES = [[390, 844, "flow"], [844, 390, "flow"], [375, 667, "flow"], [768, 1024, "stage"], [1024, 768, "stage"], [1920, 1080, "stage"], [1280, 720, "stage"]];
+for (const [w, h, mode] of SIZES) {
+  check(`layout ${w}×${h}: ${mode}, no sideways overflow${mode === "flow" ? ", 44 px targets, readable text" : ""}`, async () => {
+    for (const hash of ["006-1", "004-5", "001-2", "002-3"]) {
+      const A = await open(hash, w, h);
+      const html = A.doc.documentElement, fr = A.$("#frame");
+      assert(html.classList.contains("flow") === (mode === "flow"), `${hash}: expected ${mode}, got ${html.className}`);
+      assert(fr.scrollWidth <= fr.clientWidth + 1, `${hash}: page scrolls sideways (${fr.scrollWidth} > ${fr.clientWidth})`);
+      if (mode !== "flow") continue;
+      const vis = [...A.doc.querySelectorAll("#slide button, #slide input")].filter((e) => e.offsetParent && getComputedStyle(e).visibility !== "hidden");
+      for (const e of vis) {
+        const r = e.getBoundingClientRect();
+        assert(r.width >= 44 && r.height >= 44, `${hash}: target ${e.id || e.className || e.textContent} is ${Math.round(r.width)}×${Math.round(r.height)}`);
+        assert(r.left >= -1 && r.right <= w + 1, `${hash}: ${e.id || e.textContent} sticks out sideways`);
+      }
+      const px = (s) => parseFloat(getComputedStyle(A.$(s)).fontSize);
+      assert(px("#caption") >= 15, `${hash}: caption ${px("#caption")}px`);
+      for (const el of A.doc.querySelectorAll("#panel-lines .ln:not(.t)")) assert(parseFloat(getComputedStyle(el).fontSize) >= 11.5, `${hash}: panel line ${getComputedStyle(el).fontSize}`);
+      // top bar items don't overlap
+      const boxes = ["#menu-btn", "#settings-btn", "#segments", "#count", "#title-text"].map((s) => A.$(s).getBoundingClientRect());
+      for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        const ov = Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+        assert(!ov, `${hash}: top bar items ${i} and ${j} overlap`);
+      }
+      // the step bar stays on screen
+      const nb = A.$("#navbar").getBoundingClientRect();
+      assert(nb.bottom <= h + 1 && nb.top >= 0, `${hash}: step bar off screen`);
+    }
+  });
+}
+
+// ====================================================================== run
+(async () => {
+  let pass = 0, fail = 0;
+  for (const c of checks) {
+    const div = document.createElement("div");
+    try { await c.fn(); div.className = "pass"; div.textContent = c.name; pass++; }
+    catch (e) { div.className = "fail"; div.textContent = `${c.name} — ${e.message}`; fail++; }
+    results.appendChild(div);
+  }
+  document.getElementById("lab").innerHTML = "";
+  const s = `${pass} passed, ${fail} failed`;
+  document.getElementById("summary").textContent = s;
+  document.title = (fail ? "FAIL " : "PASS ") + s;
+})();
+</script>
+</body>
+</html>

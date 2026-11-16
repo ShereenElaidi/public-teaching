@@ -282,9 +282,15 @@
       const items = [];          // {z, svg}
       const under = [];          // plane + axes + halos
       const pl = placer();
-      // a CAUTION banner sits over the top of the picture: keep labels out from under it
-      const cz = document.getElementById("caution");
-      if (cz && document.documentElement.classList.contains("caution")) pl.box(0, 0, cz.offsetLeft + cz.offsetWidth + 10, cz.offsetTop - 72 + cz.offsetHeight + 10);
+      // a CAUTION banner (top) or a prediction card (bottom) may sit over the picture on the stage:
+      // keep labels out from under them (in the flow layout both sit outside the picture)
+      const rootCl = document.documentElement.classList;
+      if (!rootCl.contains("flow")) {
+        const cz = document.getElementById("caution");
+        if (cz && rootCl.contains("caution")) pl.box(0, 0, cz.offsetLeft + cz.offsetWidth + 10, cz.offsetTop - 72 + cz.offsetHeight + 10);
+        const pr = document.getElementById("predict");
+        if (pr && !pr.hidden && pr.offsetWidth) pl.box(pr.offsetLeft - 10, pr.offsetTop - 72 - 10, pr.offsetLeft + pr.offsetWidth + 10, H);
+      }
       const labels = [];         // {id, text, color, op, anchor, dir, kind}
 
       // axes
@@ -292,9 +298,9 @@
       for (const [x, y, z, name] of axesNow > 0.01 ? axes : []) {
         const a = clipIn(proj(fr, [0, 0, 0]), proj(fr, [-x * R * 0.35, -y * R * 0.35, -z * R * 0.35]), 30);
         const b = clipIn(proj(fr, [0, 0, 0]), proj(fr, [x * R, y * R, z * R]), 60);
-        under.push(lineSVG(a[0], a[1], b[0], b[1], col("chalk"), 0.4 * axesNow * depthOp((a[2] + b[2]) / 2), 2.5));
+        under.push(lineSVG(a[0], a[1], b[0], b[1], col("chalk"), 0.45 * axesNow * depthOp((a[2] + b[2]) / 2), 2.5));
         const dir = [b[0] - a[0], b[1] - a[1]], n = Math.hypot(...dir) || 1;
-        labels.push({ text: name, color: col("chalk"), op: DIM * 0.9 * axesNow, ax: b[0], ay: b[1], dir: [dir[0] / n, dir[1] / n], px: 36, id: "axis" + name });
+        labels.push({ text: name, color: col("chalk"), op: 0.8 * axesNow, ax: b[0], ay: b[1], dir: [dir[0] / n, dir[1] / n], px: 40, id: "axis" + name });
         pl.seg(a[0], a[1], b[0], b[1]);
       }
 
@@ -411,7 +417,7 @@
     // ---------- pointer
     svg.addEventListener("pointerdown", (e) => {
       e.preventDefault();
-      svg.setPointerCapture(e.pointerId);
+      try { svg.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
       if (camAnim) { const fr = camFrame(); camAnim = null; cam = reframe(fr); }
       if (auto) { auto = false; api.toast("auto-rotate off"); if (api.refreshKeys) api.refreshKeys(); }
       drag = { x: e.clientX, y: e.clientY };
