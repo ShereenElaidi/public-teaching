@@ -13,8 +13,8 @@ Nothing is fetched from the internet: KaTeX, fonts and clips are all in this fol
 | 1–6 | jump to a scene (also the **SCENES** menu, top left) |
 | C · N · F · B | captions · notes (scrolls down to the scene's notes and Try-it prompts, below the slide; N or Esc scrolls back) · fullscreen · bright board |
 | P | predict prompts on/off. A few steps (004: the shadow of w₂, normalizing v₃; 005: will v₃ be 0?; 006: will v₃ be 0?) first ask the class; → or Enter reveals the step and the answer with its reason, ← or Esc closes the question |
-| V · Home / double-click · A | 3D scenes and sandbox: edge-on view of span{v₁,v₂} · back to the step's view · auto-rotate |
-| S | **Settings & keys** menu (also the SETTINGS button, top left): every control above, with what it does and whether it's on; its rows are clickable, so V / A / Home work by touch too |
+| V · D / double-click · A | 3D scenes and sandbox: edge-on view of span{v₁,v₂} · back to the default view for the step · auto-rotate |
+| S | **Settings & keys** menu (also the SETTINGS button, top left): every control above, with what it does and whether it's on; its rows are clickable, so V / A / D work by touch too |
 
 Drag inside the 3D pictures to rotate them (touch works too). In the sandbox (006) students type three
 vectors of ℝ³ — integers, decimals or fractions like 1/3 — or pick a preset; → steps through one vector at a time (v₁, v₂, v₃, then u₁, u₂, u₃),

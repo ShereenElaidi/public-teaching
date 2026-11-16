@@ -65,7 +65,7 @@
     // keys3D are added in the 3D pictures (004, 005, 006).
     keys: [["←", "prev", "back"], ["→", "next", "next"], "|", ["C", "captions", "captions"],
       ["N", "notes", "notes"], ["B", "bright", "bright mode"], ["P", "predict", "predict prompts"], "|", ["S", "settings", "settings"]],
-    keys3D: [["V", "edge", "edge-on view"], ["A", "auto", "auto-rotate"], ["HOME", "home", "preset view"]],
+    keys3D: [["V", "edge", "edge-on view"], ["A", "auto", "auto-rotate"], ["D", "home", "default 3D view"]],
     // the SETTINGS menu (S): one row per control. act = what clicking the row does; rows without
     // act just explain. only3d rows are greyed out outside the 3D pictures (004, 005, 006).
     settings: [
@@ -79,7 +79,7 @@
       { key: "drag", name: "Turn the picture", only3d: true, text: "Drag inside the picture (touch works too). Clicks inside it never change the step." },
       { key: "V", name: "Edge-on view", act: "edge", only3d: true, text: "Look along the plane $\\Span\\{v_1, v_2\\}$: it becomes a line and $v_3$ stands straight up. V again to go back." },
       { key: "A", name: "Auto-rotate", act: "auto", only3d: true, text: "Turn the picture slowly by itself; dragging stops it." },
-      { key: "Home", name: "Preset view", act: "home", only3d: true, text: "Back to the view chosen for this step (also: double-click the picture)." },
+      { key: "D", name: "Default 3D view", act: "home", only3d: true, text: "Back to the default view for this step; also double-click the picture." },
       { group: "Moving around" },
       { key: "→ · Space", name: "Next step", text: "Also PageDown, or click anywhere outside the pictures." },
       { key: "←", name: "Back", text: "Also PageUp. Shows the previous step's final state." },
@@ -408,7 +408,7 @@
     ],
     notes: [
       "In $\\R^3$ the third vector casts its shadow on a whole plane, $\\Span\\{v_1, v_2\\}$, and that shadow is the sum of its shadows on $v_1$ and on $v_2$ — this only works because $v_1 \\perp v_2$.",
-      "Drag to turn the picture, press V to look edge-on along the plane, Home (or double-click) to come back, A to let it spin.",
+      "Drag to turn the picture, press V to look edge-on along the plane, D (or double-click) to come back, A to let it spin.",
       "The result, normalized, is exactly the orthonormal basis $u_1, u_2, u_3$ of Example 2.8.",
     ],
     tryIt: [
@@ -521,7 +521,7 @@
     ],
     notes: [
       "Type any three vectors: integers, decimals like 0.5, or fractions like 1/3. Gram–Schmidt runs exactly here, with the dot product, so you see the same fractions you would get by hand.",
-      "→ walks through it one vector at a time: your vectors, then $v_1, v_2, v_3$, then $u_1, u_2, u_3$. Drag to turn the picture, V to look edge-on at $\\Span\\{v_1, v_2\\}$, Home to come back.",
+      "→ walks through it one vector at a time: your vectors, then $v_1, v_2, v_3$, then $u_1, u_2, u_3$. Drag to turn the picture, V to look edge-on at $\\Span\\{v_1, v_2\\}$, D to come back.",
       "If the vectors are not a basis, some $v_k$ comes out $\\zero$ and (GS) stops, since the next step would divide by $\\norm{v_k}^2 = 0$. That happens exactly when $w_k \\in \\Span\\{w_1, \\dots, w_{k-1}\\}$.",
       "The sandbox stops at the first $v_k = \\zero$ on purpose and does not skip it. Up to that point $v_1, \\dots, v_{k-1}$ are an orthogonal basis of $\\Span\\{w_1, \\dots, w_{k-1}\\}$ — (GS) works on any linearly independent list, giving an orthogonal basis of that list's span.",
       "Entries are checked as you type: an empty field, $1/0$ or text that isn't a number is marked in coral with the reason, and nothing is computed (and → won't move on) until all nine are numbers.",

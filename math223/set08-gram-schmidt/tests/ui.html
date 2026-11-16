@@ -134,7 +134,7 @@ check("keys typed inside a coordinate field stay in the field", async () => {
   const A = await open("006-1");
   const el = A.input(1, 1);
   el.focus();
-  for (const k of ["ArrowRight", "ArrowLeft", "Home", "End", " ", "PageDown", "n", "b", "c", "v", "a", "r", "s", "p", "1", "5"]) {
+  for (const k of ["ArrowRight", "ArrowLeft", "Home", "End", " ", "PageDown", "n", "b", "c", "v", "a", "d", "r", "s", "p", "1", "5"]) {
     const ev = A.key(k, el);
     assert(!ev.defaultPrevented, `${k} was swallowed by a shortcut`);
   }
@@ -281,7 +281,7 @@ check("3D: edge-on view, auto-rotate, camera reset, drag", async () => {
   const L = () => A.P.live().status();
   A.key("v"); assert(L().edge, "V edge-on"); A.key("v"); assert(!L().edge, "V back");
   A.key("a"); assert(L().auto, "A auto"); A.key("a"); assert(!L().auto, "A off");
-  A.key("v"); A.key("Home"); assert(!L().edge, "Home resets the view");
+  A.key("v"); A.key("d"); assert(!L().edge, "D resets the view");
   await sleep(1000);
   const svg = A.$("svg.scene"), before = svg.innerHTML, r = svg.getBoundingClientRect();
   A.key("a");

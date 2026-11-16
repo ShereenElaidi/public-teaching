@@ -465,15 +465,15 @@
       edge() {
         if (!planeNow()) { api.toast("no plane: v₁ or v₂ is 0"); return; }
         edge = !edge; easeCam(edge ? edgeCam() : preset(step), 900);
-        api.toast(edge ? "edge-on: span{v₁, v₂}" : "preset view");
+        api.toast(edge ? "edge-on: span{v₁, v₂}" : "default view");
       },
       auto() { auto = !auto; api.toast(auto ? "auto-rotate on" : "auto-rotate off"); kick(); },
-      home() { home(); api.toast("preset view"); },
+      home() { home(); api.toast("default view"); },
       status: () => ({ edge, auto, plane: !!planeNow() }),
       key(e) {
         const k = e.key;
         if (k === "v" || k === "V") { this.edge(); return true; }
-        if (k === "Home") { this.home(); return true; }
+        if (k === "d" || k === "D") { this.home(); return true; }
         if (k === "a" || k === "A") { this.auto(); return true; }
         return false;
       },

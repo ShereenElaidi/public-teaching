@@ -465,13 +465,13 @@
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const tg = e.target;
-    // typing in the sandbox: every key (arrows, Home, Space, letters) belongs to the field
+    // typing in the sandbox: every key (arrows, Space, letters) belongs to the field
     if (tg && (tg.tagName === "INPUT" || tg.tagName === "TEXTAREA" || tg.isContentEditable)) return;
     const k = e.key, K = k.length === 1 ? k.toLowerCase() : k;
     // a focused prediction button keeps its own Space / Enter
     if (tg && tg.closest && tg.closest("#predict button") && (k === " " || k === "Enter")) return;
     if (k === "Enter" && ask) { reveal(); e.preventDefault(); return; }
-    const keyAct = { c: "captions", n: "notes", b: "bright", f: "fullscreen", v: "edge", a: "auto", Home: "home", p: "predict" }[K];
+    const keyAct = { c: "captions", n: "notes", b: "bright", f: "fullscreen", v: "edge", a: "auto", d: "home", p: "predict" }[K];
     if (keyAct && (["edge", "auto", "home"].indexOf(keyAct) < 0 || is3D())) act(keyAct);
     else if (k === "ArrowRight" || k === "PageDown" || k === " ") next();
     else if (k === "ArrowLeft" || k === "PageUp") prev();
