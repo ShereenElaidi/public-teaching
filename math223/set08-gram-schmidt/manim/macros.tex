@@ -1,0 +1,58 @@
+% Shared math macros for MATH 223 (Linear Algebra).
+% Loaded by BOTH slides and notes (via slides-style.tex / notes-style.tex),
+% so notation always matches between the two.
+% Notation follows the existing decks (e.g. Set 7).
+
+\usepackage{amsmath,amssymb,mathtools}
+
+% ---------- Number systems & spaces ----------
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\Mat}[2]{M_{#1\times #2}}          % \Mat{2}{2}  -> M_{2x2}
+\newcommand{\Poly}[1]{P_{#1}}                  % \Poly{2}    -> P_2
+
+% ---------- Vectors ----------
+\newcommand{\vect}[1]{\mathbf{#1}}             % \vect{v}
+\newcommand{\zero}{\mathbf{0}}
+\newcommand{\e}[1]{\mathbf{e}_{#1}}            % \e{1}
+\newcommand{\colvec}[1]{\begin{bmatrix} #1 \end{bmatrix}}  % \colvec{1\\2\\3}
+\newcommand{\T}{^{\mathsf{T}}}                 % A\T
+\newcommand{\inv}{^{-1}}
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert}
+\newcommand{\ip}[2]{\left\langle #1,\, #2 \right\rangle}
+\newcommand{\abs}[1]{\left\lvert #1 \right\rvert}
+
+% ---------- Bases, coordinates, matrices of maps ----------
+\newcommand{\B}{\mathcal{B}}
+\newcommand{\Cb}{\mathcal{C}}                  % (\C is the complex numbers)
+\newcommand{\E}{\mathcal{E}}
+\newcommand{\coord}[2]{\bigl[#1\bigr]_{#2}}    % \coord{v}{\B}        -> [v]_B
+\newcommand{\matof}[3]{\bigl[#1\bigr]_{#2\to #3}} % \matof{T}{\B}{\Cb} -> [T]_{B->C}
+\newcommand{\Dmap}[1]{D_{#1}}                  % deconcretization map D_B
+
+% ---------- Operators ----------
+\DeclareMathOperator{\im}{im}
+\DeclareMathOperator{\col}{col}
+\DeclareMathOperator{\Row}{row}
+\DeclareMathOperator{\Span}{span}
+\DeclareMathOperator{\rank}{rank}
+\DeclareMathOperator{\nullity}{nullity}
+\DeclareMathOperator{\tr}{tr}
+\DeclareMathOperator{\proj}{proj}
+\DeclareMathOperator{\RREF}{RREF}
+\newcommand{\charpoly}[1]{C_{#1}}              % \charpoly{T}(x)
+\newcommand{\Eig}[1]{E_{#1}}                   % \Eig{\lambda}
+\newcommand{\mg}{m_g}
+\newcommand{\ma}{m_a}
+
+% ---------- Row reduction ----------
+% Augmented matrix: \begin{amatrix}{3} 1 & 2 & 3 & 4 \\ ... \end{amatrix}
+% (argument = number of coefficient columns)
+\newenvironment{amatrix}[1]{%
+  \left[\begin{array}{@{}*{#1}{c}|c@{}}
+}{%
+  \end{array}\right]
+}
+\newcommand{\rowop}[1]{\xrightarrow{\;#1\;}}   % \rowop{R_3-2R_1}

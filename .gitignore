@@ -1,0 +1,6 @@
+.DS_Store
+# Manim render caches and drafts
+**/manim/.media/
+**/manim/media/
+**/manim/__pycache__/
+**/clips-draft/

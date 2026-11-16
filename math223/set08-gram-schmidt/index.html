@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gram–Schmidt · MATH 223 Set 8</title>
+<meta name="description" content="Interactive Gram–Schmidt demo: worked examples in R² and R³, normalizing, what breaks, and an R³ sandbox for your own basis.">
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/chalkboard.css">
+</head>
+<body>
+<div id="frame">
+<div id="slide">
+<div id="stage">
+  <header id="topbar">
+    <div id="title"><span id="title-text" class="smallcaps"></span><button id="menu-btn" type="button" aria-label="Scenes">SCENES ▾</button><button id="settings-btn" type="button" aria-label="Settings and keys">SETTINGS ▾</button></div>
+    <div id="progress"><div id="segments"></div><span id="count" class="smallcaps"></span></div>
+  </header>
+  <nav id="menu"></nav>
+  <section id="settings" aria-label="Settings and keys"></section>
+
+  <main id="picture" aria-label="picture"></main>
+  <div id="caution" role="note"><span class="cz-chip">⚠ Caution</span><span class="cz-text"></span></div>
+
+  <section id="right">
+    <div class="box">
+      <div class="chip" id="panel-chip"></div>
+      <div id="panel-lines"></div>
+      <div id="panel-step"></div>
+    </div>
+  </section>
+
+  <footer id="lower">
+    <span class="chip" id="note-chip">REMARK</span>
+    <div id="caption"></div>
+    <div id="touch-nav"><button id="prev-btn" type="button" aria-label="Back">‹</button><button id="next-btn" type="button" aria-label="Next">›</button></div>
+    <div id="keys"></div>
+  </footer>
+  <div id="toast"></div>
+</div>
+</div>
+<!-- the handout: the current scene's notes, on the page below the slide (N scrolls here and back) -->
+<section id="handout" aria-label="Notes">
+  <div class="ho-head"><span class="chip ho-chip" id="ho-chip"></span><button type="button" id="ho-up">↑ BACK TO THE SLIDE</button></div>
+  <div id="ho-body"></div>
+</section>
+</div>
+<noscript>This demo needs JavaScript.</noscript>
+
+<script src="assets/katex/katex.min.js"></script>
+<script src="assets/steps.js"></script>
+<script src="assets/space3d.js"></script>
+<script src="assets/sandbox.js"></script>
+<script src="assets/chalkboard.js"></script>
+</body>
+</html>
